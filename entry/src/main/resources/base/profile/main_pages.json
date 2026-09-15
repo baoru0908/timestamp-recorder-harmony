@@ -1,0 +1,11 @@
+{
+  "src": [
+    "pages/Index",
+    "pages/EventDetail",
+    "pages/Stats",
+    "pages/Settings",
+    "pages/Tutorial",
+    "pages/About",
+    "pages/FormConfig"
+  ]
+}

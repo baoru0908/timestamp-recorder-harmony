@@ -1,0 +1,28 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "时间戳记录"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "一键记录每个事件的时间戳"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "时间戳记录器"
+    },
+    {
+      "name": "widget_all_desc",
+      "value": "全部事件：彩色圆点 + 名称 + 最近记录时间，点击任意行即记录"
+    },
+    {
+      "name": "widget_single_desc",
+      "value": "单事件大按钮：点击即记录一条"
+    },
+    {
+      "name": "widget_capsule_desc",
+      "value": "胶囊快捷记录：点击即记录一条"
+    }
+  ]
+}
