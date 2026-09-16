@@ -182,7 +182,7 @@ entry/src/main/ets/
 ├─ entryability/        EntryAbility、FormConfigAbility
 └─ entrybackupability/  EntryBackupAbility —— 系统备份扩展
 
-docs/                   移植规格 / 可行性评估 / Android UI 参考 / screenshots（README 用图）
+docs/                   数据格式规格（跨端兼容红线）+ screenshots（README 用图）
 tools/                  deploy_all.sh（一键多设备构建部署）
 ```
 
@@ -190,9 +190,7 @@ tools/                  deploy_all.sh（一键多设备构建部署）
 
 ## 📚 文档
 
-- [`docs/port-spec.md`](docs/port-spec.md) —— 移植规格（数据结构 / 存储 / 备份格式 / 色板）
-- [`docs/harmonyos-port-assessment.md`](docs/harmonyos-port-assessment.md) —— 可行性评估与 API 映射
-- [`docs/android-ui-reference.md`](docs/android-ui-reference.md) —— Android 原版 UI 采集（作为参考）
+- [`docs/port-spec.md`](docs/port-spec.md) —— **数据格式与跨端兼容红线**：数据模型 / 存储设计 / 备份格式 / 事件色板 / 时间显示规则
 
 ---
 
