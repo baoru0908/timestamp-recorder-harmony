@@ -39,7 +39,6 @@ const ISLAND_H: number = 56;
 const FAB_SIZE: number = 52;
 const RADIUS_LG: number = 20;
 const CARD_GAP: number = 10;
-const APPBAR_H: number = 102;   // 旧占位（未沉浸）；沉浸后改用 statusBarHeight + TOPBAR_CONTENT_H
 const TOPBAR_CONTENT_H: number = 70; // 顶栏内容高（不含状态栏）：沉浸后顶栏总高 = statusBarHeight + 本值
 const TOPBAR_FADE_H: number = 32;    // 顶栏底部渐隐区高度：linearGradientBlur 在此区间把模糊强度渐减到 0。
                                      // ⚠️ 它同时决定「材质层总高」与「首项留白」（PAGE_TOP_GAP = 本值）：
@@ -549,7 +548,6 @@ struct Index {
 
   /** 底部留白高度 = 底栏占位 + 小白条 */
   private tlScroller: Scroller = new Scroller();
-  private tlInitScrolled: boolean = false;
 
   private bottomPad(): number {
     return BOTTOMBAR_H + this.navBarH;
@@ -1381,20 +1379,6 @@ struct Index {
     .padding({ bottom: this.navBarH })
     // 底栏拖拽：按住胶囊岛横向拖动即可切换页面（滑块 1:1 跟手，松手吸附）
     .onTouch((e: TouchEvent) => this.onIslandTouch(e))
-  }
-
-  /** 悬浮加号：已并入底部胶囊岛中缝（P1-4 修复 align 失效） */
-  @Builder
-  FabButton() {
-    Stack() {
-      this.PlusIcon(26, 3, this.theme().white)
-    }
-    .width(FAB_SIZE)
-    .height(FAB_SIZE)
-    .borderRadius(FAB_SIZE / 2)
-    .backgroundColor(this.theme().primary)
-    .shadow({ radius: 12, color: '#331565C0', offsetY: 4 })
-    .onClick(() => this.openAddSheet())
   }
 
   // ==================== 新建 / 编辑事件弹层 ====================
