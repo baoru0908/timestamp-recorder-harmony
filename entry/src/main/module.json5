@@ -17,18 +17,8 @@
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",
-    "requestPermissions": [
-      {
-        "name": "ohos.permission.INTERNET",
-        "reason": "$string:EntryAbility_desc",
-        "usedScene": {
-          "abilities": [
-            "EntryAbility"
-          ],
-          "when": "inuse"
-        }
-      }
-    ],
+    // 不申请任何权限：所有数据只写本机 Preferences，零网络请求。
+    // 打开外链用 startAbility 交给系统浏览器（由浏览器自己联网），本应用无需 INTERNET 权限。
     "abilities": [
       {
         "name": "EntryAbility",
