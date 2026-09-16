@@ -5,6 +5,7 @@ import { syncAllForms } from '../util/FormSync';
 import { colorToHex, EVENT_COLORS, randomEventColor, TimelineRecord, TimestampEvent } from '../model/TimestampEvent';
 import { TimeFormat } from '../util/TimeFormat';
 import { getTheme, ThemeColors, GlassColumnModifier, GlassStackModifier, GLASS_BLUR_ONLY } from '../util/Theme';
+import { logD } from '../util/Log';
 
 /** 列表行模型：事件 + 该事件的记录数 / 最近一条时间 */
 class EventRow {
@@ -323,7 +324,7 @@ struct Index {
    */
   private switchTab(i: number): void {
     if (this.curTab === i) {
-      console.info(`[Tab] switch ${i} 被忽略（curTab 已是该页）`);
+      logD('Tab', `switch ${i} 被忽略（curTab 已是该页）`);
       return;
     }
     this.curTab = i;
@@ -479,7 +480,7 @@ struct Index {
         this.islandDragging = false;
         this.suppressClickUntil = Date.now() + 300;
         // 一行对账日志：p = 手指算出的进度，contentP = Swiper 上报的内容进度；两者应几乎相等（联动正常）
-        console.info(`[Drag] up p=${this.tabProgress.toFixed(3)} contentP=${this.contentP.toFixed(3)} target=${target}`);
+        logD('Drag', `up p=${this.tabProgress.toFixed(3)} contentP=${this.contentP.toFixed(3)} target=${target}`);
         // 松手吸附同样**自绘**：页面与滑块共用同一个 p、同一套「过半」判决，并在收口时把页号钉死。
         // 旧写法「stopFakeDrag 交给 Swiper 自己吸附 + 滑块另外 animateTo」是两套判决 → 会错位。
         this.startSelfAnim(target, DRAG_SNAP_MS);
