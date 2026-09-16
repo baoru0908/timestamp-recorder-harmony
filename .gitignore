@@ -25,3 +25,10 @@ build_p*.log
 
 # WorkBuddy 工作数据（内部记忆，含设备信息，严禁入库）
 /.workbuddy/
+
+# release: shangjia wuliao (app/screenshots/icon/RELEASE_PREP han mima) - jin zhi ru ku
+/release
+# qianming peizhi han lujing yu mima mimiwen - jin zhi ru ku
+/build-profile.json5
+# gongju jiaoben han bendi jue dui lujing - bu ru ku
+/tools

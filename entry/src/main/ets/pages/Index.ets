@@ -955,7 +955,7 @@ struct Index {
           Text('还没有事件')
             .fontSize(15)
             .fontColor(this.theme().onSurfaceVariant)
-          Text('点击底部中间的 ＋ 添加第一个事件') // 空态引导：FAB 在底部正中间（曾误写「右下角」）
+          Text('点击底部中间的 ＋ 添加一个事件') // 空态引导：FAB 在底部正中间（曾误写「右下角」）
             .fontSize(13)
             .fontColor(this.theme().onSurfaceVariant)
             .margin({ top: 6 })

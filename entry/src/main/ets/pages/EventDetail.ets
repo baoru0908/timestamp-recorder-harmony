@@ -561,7 +561,7 @@ struct EventDetail {
             Text('还没有记录')
               .fontSize(16)
               .fontColor(this.theme().onSurfaceVariant)
-            Text('点上方「记录此刻」记第一条吧')
+            Text('点上方「记录此刻」记一条吧')
               .fontSize(13)
               .fontColor(this.theme().onSurfaceVariant)
               .margin({ top: 8 })

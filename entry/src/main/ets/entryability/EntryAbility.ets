@@ -26,12 +26,12 @@ export default class EntryAbility extends UIAbility {
     try {
       this.context.getApplicationContext().setColorMode(ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET);
     } catch (err) {
-      hilog.error(DOMAIN, 'testTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
+      hilog.error(DOMAIN, 'appTag', 'Failed to set colorMode. Cause: %{public}s', JSON.stringify(err));
     }
     // 初始化全局深浅色标志（跟随系统），页面用 @StorageProp('isDark') 绑定
     AppStorage.setOrCreate<boolean>('isDark',
       this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onCreate');
   }
 
   /** 系统深浅色切换时全局更新，驱动所有页面换肤 */
@@ -39,23 +39,23 @@ export default class EntryAbility extends UIAbility {
     const dark: boolean = newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
     AppStorage.setOrCreate<boolean>('isDark', dark);
     this.applyImmersive(); // 深浅色切换时同步刷新状态栏 / 导航条图标颜色
-    hilog.info(DOMAIN, 'testTag', 'colorMode changed, isDark=%{public}s', `${dark}`);
+    hilog.info(DOMAIN, 'appTag', 'colorMode changed, isDark=%{public}s', `${dark}`);
   }
 
   onDestroy(): void {
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onDestroy');
+    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onDestroy');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     // Main window is created, set main page for this ability
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
+    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onWindowStageCreate');
 
     windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
-        hilog.error(DOMAIN, 'testTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
+        hilog.error(DOMAIN, 'appTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
       }
-      hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
+      hilog.info(DOMAIN, 'appTag', 'Succeeded in loading the content.');
     });
 
     // 沉浸式：内容延伸到状态栏 / 导航条之下，系统栏透明；避让区高度写入 AppStorage 供页面 padding
@@ -64,11 +64,11 @@ export default class EntryAbility extends UIAbility {
       win.setWindowLayoutFullScreen(true).then(() => {
         this.applyImmersive();
       }).catch(() => {
-        hilog.error(DOMAIN, 'testTag', '%{public}s', 'setWindowLayoutFullScreen failed');
+        hilog.error(DOMAIN, 'appTag', '%{public}s', 'setWindowLayoutFullScreen failed');
       });
       win.on('avoidAreaChange', () => this.applyImmersive());
     }).catch(() => {
-      hilog.error(DOMAIN, 'testTag', '%{public}s', 'getMainWindow failed');
+      hilog.error(DOMAIN, 'appTag', '%{public}s', 'getMainWindow failed');
     });
   }
 
@@ -98,22 +98,22 @@ export default class EntryAbility extends UIAbility {
         navigationBarContentColor: icon
       }).catch(() => {});
     } catch (err) {
-      hilog.error(DOMAIN, 'testTag', 'applyImmersive failed: %{public}s', JSON.stringify(err));
+      hilog.error(DOMAIN, 'appTag', 'applyImmersive failed: %{public}s', JSON.stringify(err));
     }
   }
 
   onWindowStageDestroy(): void {
     // Main window is destroyed, release UI related resources
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageDestroy');
+    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onWindowStageDestroy');
   }
 
   onForeground(): void {
     // Ability has brought to foreground
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onForeground');
+    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onForeground');
   }
 
   onBackground(): void {
     // Ability has back to background
-    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onBackground');
+    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onBackground');
   }
 }
