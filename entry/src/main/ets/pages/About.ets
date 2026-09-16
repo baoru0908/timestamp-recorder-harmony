@@ -10,7 +10,7 @@ const URL_REPO: string = 'https://github.com/baoru0908/timestamp-recorder-harmon
 const URL_ISSUES: string = 'https://github.com/baoru0908/timestamp-recorder-harmony/issues';
 
 /**
- * 关于页（对齐 Android `AboutActivity`）：版本信息、开发者卡片、项目说明、开源与字体出处、GitHub 入口。
+ * 关于页（对齐 Android `AboutActivity`）：版本信息、开发者卡片、项目说明、开源与隐私说明、GitHub 入口。
  * 开发者头像与署名离线打包（App 零网络权限场景也能展示），点击交给系统浏览器。
  */
 @Entry
@@ -141,20 +141,22 @@ struct About {
           this.InfoCard('关于本项目',
             '一款完全离线、零权限的时间戳记录工具：在 App 内或桌面卡片单击，即可为任意事件快速记下一笔当前时间。')
 
-          // ---------- 开源与字体 ----------
+          // ---------- 开源与隐私 ----------
           Column() {
-            Text('开源与字体')
+            Text('开源与隐私')
               .fontSize(16)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.theme().onSurface)
               .width('100%')
-            Text('界面字体采用小米 MiSans（© 小米，全球免费商用），在此注明出处。为控制安装包体积，仅嵌入常用字子集，字体本身未作任何修改。')
+            // ⚠️ 此处曾写「界面字体采用小米 MiSans」，但本工程**没有内置任何字体文件**（用的是系统字体，
+            //    MiSans 是 Android 版的做法）→ 文案与实际不符，2026-09-16 修正。
+            Text('界面使用系统默认字体，未内置任何字体文件；代码均为原创、不依赖任何第三方库，图标为自绘矢量图。欢迎在 GitHub 查看源码、提交反馈或参与改进。')
               .fontSize(13)
               .fontColor(this.theme().onSurfaceVariant)
               .lineHeight(20)
               .width('100%')
               .margin({ top: 8 })
-            Text('本应用代码均为原创、不依赖任何第三方库；图标为自绘矢量图。欢迎在 GitHub 查看源码、提交反馈或参与改进。')
+            Text('应用不申请任何权限、不发起网络请求，所有数据只保存在本机；打开外部链接时交给系统浏览器处理。')
               .fontSize(13)
               .fontColor(this.theme().onSurfaceVariant)
               .lineHeight(20)

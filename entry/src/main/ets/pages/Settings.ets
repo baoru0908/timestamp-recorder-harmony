@@ -284,7 +284,7 @@ struct Settings {
           this.SectionTitle('其他')
           this.RowAction('', '使用教程', '在线图文教程（无网时显示内置简明版）',
             () => router.pushUrl({ url: 'pages/Tutorial' }))
-          this.RowAction('', '关于', '版本信息 · 开发者 · 开源与字体',
+          this.RowAction('', '关于', '版本信息 · 开发者 · 开源与隐私',
             () => router.pushUrl({ url: 'pages/About' }))
         }
         .width('100%')
