@@ -6,21 +6,33 @@
 
 HarmonyOS NEXT 原生应用 · ArkTS / ArkUI 声明式 · 与 Android 版备份互通
 
-![Platform](https://img.shields.io/badge/Platform-HarmonyOS_NEXT-0052D9?style=flat-square)
-![API](https://img.shields.io/badge/API-22%2B-007ACC?style=flat-square)
-![Language](https://img.shields.io/badge/Language-ArkTS-8114E5?style=flat-square)
-![Permissions](https://img.shields.io/badge/Permissions-None-success?style=flat-square)
-![Size](https://img.shields.io/badge/HAP-%3C1_MB-lightgrey?style=flat-square)
-![Release](https://img.shields.io/github/v/release/baoru0908/timestamp-recorder-harmony?style=flat-square&color=success&label=release)
+<br/>
 
-<img src="docs/screenshots/events.jpg" width="21%" alt="事件页" />
+<!-- 仓库实时状态：shields.io 现取 GitHub 数据，随仓库变化；每枚徽章均可点击跳转 -->
+[![Release][b-release]][l-releases]
+[![Stars][b-stars]][l-stars]
+[![Forks][b-forks]][l-forks]
+[![Issues][b-issues]][l-issues]
+[![Last commit][b-commit]][l-commits]
+
+<!-- 技术属性 -->
+[![HarmonyOS NEXT][b-platform]][l-harmonyos]
+[![API][b-api]][l-spec]
+[![ArkTS][b-lang]][l-repo]
+[![Permissions][b-perm]][l-repo]
+[![HAP size][b-hap]][l-releases]
+
+<br/>
+
+<img src="docs/screenshots/events.jpg" width="21%" alt="事件列表" />
 <img src="docs/screenshots/timeline.jpg" width="21%" alt="时间线" />
 <img src="docs/screenshots/stats.jpg" width="21%" alt="统计" />
-<img src="docs/screenshots/tutorial.jpg" width="21%" alt="教程" />
+<img src="docs/screenshots/tutorial.jpg" width="21%" alt="使用教程" />
 
-<sub>事件 · 时间线 · 统计 · 教程（HarmonyOS 模拟器实拍）</sub>
+<sub>事件列表 · 时间线 · 统计 · 使用教程 —— HarmonyOS 模拟器实拍</sub>
 
 </div>
+
 
 ---
 
@@ -188,3 +200,28 @@ tools/                  deploy_all.sh（一键多设备构建部署）
 <sub>© 2026 baoru0908 · 独立开发者个人项目 · 灵感来自日常记录需求</sub><br/>
 <sub>Android 版：<a href="https://github.com/baoru0908/timestamp-recorder">baoru0908/timestamp-recorder</a></sub>
 </div>
+
+
+---
+
+<!-- ================= 徽章与跳转目标（引用式定义，不参与正文渲染） ================= -->
+
+[b-release]: https://img.shields.io/github/v/release/baoru0908/timestamp-recorder-harmony?style=flat-square&label=release&color=2ea44f&sort=semver
+[b-stars]: https://img.shields.io/github/stars/baoru0908/timestamp-recorder-harmony?style=flat-square&label=stars&color=0969da&logo=github&logoColor=white
+[b-forks]: https://img.shields.io/github/forks/baoru0908/timestamp-recorder-harmony?style=flat-square&label=forks&color=6b7280&logo=github&logoColor=white
+[b-issues]: https://img.shields.io/github/issues/baoru0908/timestamp-recorder-harmony?style=flat-square&label=issues&color=d97706&logo=github&logoColor=white
+[b-commit]: https://img.shields.io/github/last-commit/baoru0908/timestamp-recorder-harmony?style=flat-square&label=last%20commit&color=16a34a&logo=git&logoColor=white
+[b-platform]: https://img.shields.io/badge/Platform-HarmonyOS_NEXT-0052D9?style=flat-square&logo=harmonyos&logoColor=white
+[b-api]: https://img.shields.io/badge/API-22%2B-007ACC?style=flat-square
+[b-lang]: https://img.shields.io/badge/Language-ArkTS-8114E5?style=flat-square
+[b-perm]: https://img.shields.io/badge/Permissions-None-2ea44f?style=flat-square
+[b-hap]: https://img.shields.io/badge/HAP-%3C1_MB-6b7280?style=flat-square
+
+[l-repo]: https://github.com/baoru0908/timestamp-recorder-harmony
+[l-releases]: https://github.com/baoru0908/timestamp-recorder-harmony/releases
+[l-stars]: https://github.com/baoru0908/timestamp-recorder-harmony/stargazers
+[l-forks]: https://github.com/baoru0908/timestamp-recorder-harmony/forks
+[l-issues]: https://github.com/baoru0908/timestamp-recorder-harmony/issues
+[l-commits]: https://github.com/baoru0908/timestamp-recorder-harmony/commits/main
+[l-spec]: docs/port-spec.md
+[l-harmonyos]: https://developer.huawei.com/consumer/cn/
