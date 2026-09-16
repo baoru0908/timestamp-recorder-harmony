@@ -138,10 +138,12 @@ struct FormConfig {
           ForEach(this.rows, (r: RowItem) => {
             ListItem() {
               Row() {
-                Circle()
+                // ⚠️ 原用 Circle().fill()：fill 是 API 26 新增，平板（API 24）上不可用 → 改全版本兼容的圆角方块画法
+                Row()
                   .width(14)
                   .height(14)
-                  .fill(colorToHex(r.ev.color))
+                  .borderRadius(7)
+                  .backgroundColor(colorToHex(r.ev.color))
                 Column() {
                   Text(r.ev.name)
                     .fontSize(16)

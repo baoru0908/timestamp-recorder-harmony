@@ -4,48 +4,51 @@
  * 深浅两套由 getTheme(isDark) 切换；isDark 由 AppStorage('isDark') 全局驱动，跟随系统。
  */
 import uiMaterial from '@ohos.arkui.uiMaterial';
-import deviceInfo from '@ohos.deviceInfo';
 
 /**
  * 液态玻璃统一封装（API 26 ImmersiveMaterial）。
  *
- * 跟随系统「沉浸光感」风格的两个前提（缺一不可）：
- *  1) entry/module.json5 声明 metadata [{ name:"ohos.arkui.UIMaterial.state", value:"enable" }]
+ * 跟随系统「沉浸光感」风格的三个前提（缺一不可）：
+ *  1) 编译 targetSdkVersion ≥ 26.0.0(26) —— 本机 SDK 已为 HarmonyOS 26.0.0.105(API 26)，工程已提到 26。
+ *  2) entry/module.json5 声明 metadata [{ name:"ohos.arkui.UIMaterial.state", value:"enable" }]
  *     → 应用 MaterialState 置为 ENABLE，系统材质样式优先级高于组件自身 background/blur → 真正跟随系统光感。
- *  2) 运行设备系统 ≥ HarmonyOS 7 / API 26（系统级沉浸光感是 API 26 特性，见 SKILL.md 空间化章节）。
- *     当前兼容档 6.0.2(22)：平板(HarmonyOS 6.1.0)不满足，仅降级静态高斯模糊；
- *     模拟器(nova 16 Pro, HarmonyOS 7.0.0/API 26)满足，但本机 DevEco 6.2 SDK 仅装 6.0.2(22)，
- *     无法编译 target=26 的包（hvigor 报 illegal），故 app 仍跑 22 兼容档、systemMaterial 被系统禁用 → 同样降级。
- *     → 需升级 DevEco/SDK 到 API 26 支持并把 app target 提到 26.0.0(26)，模拟器方能真跟随光感。
+ *  3) 组件必须位于「沉浸光感生效范围」内：Navigation/NavDestination 标题栏，
+ *     或横向 Tabs 中 barPosition=BarPosition.End 的底部 TabBar。
+ *     ⚠️ 这是最容易踩的坑：范围外的组件系统直接判
+ *     "Material inactive: out of scope. Use component in navigation title bar or Tabbar."
+ *     → 材质完全不生效、组件背景变全透明（旧版曾误判为「模拟器不支持 systemMaterial」）。
+ *     底部胶囊岛已因此改造为 Tabs 的 tabBar（见 pages/Index.ets）。
  *
  * applyGlass 行为：
- *  - getMaterialInfo().state===ENABLE 且 isImmersiveMaterialSupported() 时 → 纯 systemMaterial + lightEffect:{color:undefined} 跟随系统，
- *    绝不叠 backgroundEffect（会盖住系统材质、造成「不随系统光感」的静态模糊）。
- *  - 其余（系统/SDK 不支持）→ 仅 backgroundEffect 实时高斯模糊降级，带极低 alpha 底色保可见。
+ *  - getMaterialInfo().state===ENABLE 且 isImmersiveMaterialSupported() 时 → 纯 systemMaterial + lightEffect:{color:undefined} 跟随系统。
+ *    另叠一层极低 alpha 的 backgroundColor 兜底：系统材质生效时会被其覆盖（看不出来），
+ *    万一材质未生效（如组件又跑出生效范围）也有底色，不会变成「整片透明」。
+ *  - 其余（设备系统版本不足 / metadata 未生效）→ 仅 backgroundEffect 实时高斯模糊降级。
  */
 type AnyGlassAttr = RowAttribute | ColumnAttribute | StackAttribute;
 
-/** 模拟器即使系统是 API 26 且 state=ENABLE，渲染层也不实现 systemMaterial（调了就整片透明）→ 必须走模糊兜底 */
-function isEmulator(): boolean {
+/** 诊断用：把当前设备的沉浸光感能力打进 hilog，便于确认「是否 out of scope」 */
+function logMaterial(tag: string): boolean {
+  let ok: boolean = false;
   try {
-    return deviceInfo.productModel.toLowerCase().includes('emulator');
+    const supported: boolean = uiMaterial.isImmersiveMaterialSupported();
+    const state: number = uiMaterial.getMaterialInfo().state;
+    ok = supported && state === uiMaterial.MaterialState.ENABLE;
+    console.info(`[Glass] ${tag}: supported=${supported} state=${state} useSystem=${ok}`);
   } catch (e) {
-    return false;
+    console.info(`[Glass] ${tag}: query failed`);
   }
+  return ok;
 }
 
-function applyGlass(attr: AnyGlassAttr, color: string, radius: number): void {
-  let useSystem: boolean = false;
-  try {
-    // 三条件：非模拟器 + 设备支持 + 应用级 MaterialState 已 ENABLED（module.json5 metadata 生效）。
-    useSystem = !isEmulator() &&
-      uiMaterial.isImmersiveMaterialSupported() &&
-      uiMaterial.getMaterialInfo().state === uiMaterial.MaterialState.ENABLE;
-  } catch (e) {
-    useSystem = false;
-  }
+function applyGlass(attr: AnyGlassAttr, color: string, radius: number, inScope: boolean): void {
+  // 三条件：①组件在生效范围（Navigation 标题栏 / 底部 TabBar）②设备/系统支持 ③应用 MaterialState=ENABLE。
+  // inScope 由调用方声明：范围外的组件若强行调 systemMaterial，系统判 out of scope → 材质不生效且背景全透。
+  const useSystem: boolean = inScope && logMaterial('applyGlass');
+  // 兜底底色：系统材质生效时被覆盖；未生效（降级分支）时也有底，不至于整片透明。
+  attr.backgroundColor(color);
   if (useSystem) {
-    // 跟随系统沉浸光感：仅 systemMaterial；lightEffect 显式置 undefined 表示光感跟随系统、不写死颜色。
+    // 跟随系统沉浸光感：systemMaterial；lightEffect 显式置 undefined 表示光感跟随系统、不写死颜色。
     // 严禁再叠 backgroundEffect —— ENABLE 状态下系统材质优先级最高，叠加模糊只会盖住/混淆系统光感。
     attr.systemMaterial(new uiMaterial.ImmersiveMaterial({
       style: uiMaterial.ImmersiveStyle.ULTRA_THIN,
@@ -66,7 +69,7 @@ export class GlassRowModifier implements AttributeModifier<RowAttribute> {
     this.radius = radius;
   }
   applyNormalAttribute(instance: RowAttribute): void {
-    applyGlass(instance, this.color, this.radius);
+    applyGlass(instance, this.color, this.radius, false);
   }
 }
 
@@ -78,19 +81,22 @@ export class GlassColumnModifier implements AttributeModifier<ColumnAttribute> {
     this.radius = radius;
   }
   applyNormalAttribute(instance: ColumnAttribute): void {
-    applyGlass(instance, this.color, this.radius);
+    applyGlass(instance, this.color, this.radius, false);
   }
 }
 
+/** inScope=true 仅限「底部 TabBar / Navigation 标题栏」内的组件（当前：底部胶囊岛挂在 Tabs.tabBar 上） */
 export class GlassStackModifier implements AttributeModifier<StackAttribute> {
   private color: string;
   private radius: number;
-  constructor(color: string, radius: number = 28) {
+  private inScope: boolean;
+  constructor(color: string, radius: number = 28, inScope: boolean = false) {
     this.color = color;
     this.radius = radius;
+    this.inScope = inScope;
   }
   applyNormalAttribute(instance: StackAttribute): void {
-    applyGlass(instance, this.color, this.radius);
+    applyGlass(instance, this.color, this.radius, this.inScope);
   }
 }
 export interface ThemeColors {
@@ -177,6 +183,14 @@ const DARK: ThemeColors = {
 export function getTheme(isDark: boolean): ThemeColors {
   return isDark ? DARK : LIGHT;
 }
+
+/**
+ * 「纯模糊、不加 tint」的材质色（透明）。
+ * 依据：实测鸿蒙第一方设置页顶栏底色与页面背景**完全一致**（标题区/下方/卡片缝隙多点采样均 #EFF3F6）
+ *       —— 它只对背后的内容做模糊，不额外叠任何色。顶栏用它即可得到同样的「栏底=页面背景」观感。
+ * 注意：悬浮胶囊岛**不能**用它（岛下面就是滚动内容，没有 tint 会失去「实体面板」感），仍用 glassBar。
+ */
+export const GLASS_BLUR_ONLY: string = '#00000000';
 
 /** AppStorage 全局键名 */
 export const KEY_IS_DARK: string = 'isDark';

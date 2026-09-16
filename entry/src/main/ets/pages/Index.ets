@@ -4,7 +4,7 @@ import { EventRepository } from '../data/EventRepository';
 import { syncAllForms } from '../util/FormSync';
 import { colorToHex, EVENT_COLORS, randomEventColor, TimelineRecord, TimestampEvent } from '../model/TimestampEvent';
 import { TimeFormat } from '../util/TimeFormat';
-import { getTheme, ThemeColors, GlassRowModifier, GlassColumnModifier, GlassStackModifier } from '../util/Theme';
+import { getTheme, ThemeColors, GlassColumnModifier, GlassStackModifier, GLASS_BLUR_ONLY } from '../util/Theme';
 
 /** 列表行模型：事件 + 该事件的记录数 / 最近一条时间 */
 class EventRow {
@@ -41,11 +41,22 @@ const RADIUS_LG: number = 20;
 const CARD_GAP: number = 10;
 const APPBAR_H: number = 102;   // 旧占位（未沉浸）；沉浸后改用 statusBarHeight + TOPBAR_CONTENT_H
 const TOPBAR_CONTENT_H: number = 70; // 顶栏内容高（不含状态栏）：沉浸后顶栏总高 = statusBarHeight + 本值
+const TOPBAR_FADE_H: number = 32;    // 顶栏底部渐隐区高度：linearGradientBlur 在此区间把模糊强度渐减到 0。
+                                     // ⚠️ 它同时决定「材质层总高」与「首项留白」（PAGE_TOP_GAP = 本值）：
+                                     //    收窄 → 材质层底边上移、首卡片更贴标题；但**满模糊平台必须仍盖住标题区**（见 ramp）。
+// 点击 tab 切换的平移动画：时长 ms / 逐帧节拍 ms。
+// ⚠️ 这套动画由我们自己逐帧驱动（见 switchTab），不用 Swiper 的 changeIndex 过渡动画 ——
+//    实测：只要在过渡期间逐帧改 tabProgress（动画状态），内容区三帧截图完全一致 = 被重渲染打断成瞬跳。
+const TAB_ANIM_MS: number = 300;
+const TAB_ANIM_TICK_MS: number = 16;
+const DRAG_SNAP_MS: number = 180;   // 甩手/松手后的吸附时长（同样自绘，保证页与块同一套判决）
 const BOTTOMBAR_H: number = 92; // 悬浮玻璃底栏占位（内容层底部留白，沉浸后另加 navBarHeight）
 const FAB_GAP: number = 60;     // 底部胶囊岛中央 FAB 中缝禁区宽度
 // ⚠️ 内容层不再用 padding 给悬浮栏让位：改为首尾各插一个等高「留白 ListItem」，
 //    这样内容可以从透明栏（实时高斯模糊）背后滚过去，时间轴也能一路贯穿到屏幕上下边缘。
-const PAGE_TOP_GAP: number = 10; // 首项距顶栏底的额外呼吸量
+// 首项距顶栏底的呼吸量。必须 ≥ TOPBAR_FADE_H：顶栏底部是「模糊渐减到 0」的过渡区，
+// 留白不足时静止状态下首个卡片会落在过渡区里被轻微糊掉。两页的顶部占位都取自 topPad()，保持一致。
+const PAGE_TOP_GAP: number = TOPBAR_FADE_H;
 
 function monthKeyOf(millis: number): string {
   const d: Date = new Date(millis);
@@ -80,9 +91,24 @@ struct Index {
   // Tab 跟手滑块：0=事件页，1=时间线页；滑动过程中为 0~1 连续值（由 Swiper.onContentDidScroll 驱动）
   @State tabProgress: number = 0;
   @State islandW: number = 0; // 底部胶囊岛实测宽度（用于计算滑块宽度与位移）
+  @State islandDragging: boolean = false; // 正在拖动底栏滑块（拖动期间由手指驱动 tabProgress）
+  @State islandSettling: boolean = false; // 松手后吸附中（禁止 Swiper 回写 tabProgress，避免与滑块动画打架）
+  @State pageW: number = 0; // 页面宽度 vp（拖拽驱动内容位移、时间轴灰线跟随页面平移）
 
   private repo: EventRepository | null = null;
   private swiperCtl: SwiperController = new SwiperController();
+  private dragStartX: number = 0;        // 拖动起点（windowX）
+  private dragStartProgress: number = 0; // 拖动起始进度（0 或 1）
+  private suppressClickUntil: number = 0; // 拖动刚结束时短暂屏蔽 onClick，避免误触切换
+  private fakeDragging: boolean = false;  // Swiper 模拟拖拽是否已开启（@since 23，try/catch 兜底低版本）
+  private contentP: number = -1;          // Swiper 上报的内容进度（诊断/对账用：-1 表示尚未上报）
+  private dragApplied: number = 0;
+  // 点击切换的自绘平移动画（与手指拖拽共用 fakeDrag 机制）
+  private tapTimer: number = -1;
+  private tapFrom: number = 0;
+  private tapTo: number = 0;
+  private tapStartTs: number = 0;
+  private tapAnimMs: number = 300;   // 本次自绘动画时长（点击 300 / 松手吸附 180）        // 本次拖动中已下发给 Swiper 的累计位移（fakeDragBy 是增量，需自己记已下发量）
 
   /** 当前语义色板（浅/深）。⚠️ ArkUI struct 内不能用 getter（首帧 this 为 undefined 崩溃），必须用普通方法 */
   private theme(): ThemeColors {
@@ -95,6 +121,11 @@ struct Index {
     this.repo.onChanged = () => syncAllForms(ctx);
     this.sortManual = this.repo.getSortMode() !== 'recent';
     this.reload();
+  }
+
+  /** 页面销毁：清掉点击平移动画的定时器，避免野定时器继续改状态 */
+  aboutToDisappear(): void {
+    this.stopTapAnim(false, false);
   }
 
   /** 页面重新可见时刷新（从详情页 / 设置页返回，补齐 ForEach 复用不刷新的缺口） */
@@ -280,12 +311,210 @@ struct Index {
     this.repo?.setEventsOrder(arr.map((r: EventRow) => r.ev.id));
   }
 
+  /**
+   * 点击 tab 切换（自绘平移动画）。
+   *
+   * 为什么不用 Swiper 自带的过渡动画（`changeIndex` + `.duration()`）：
+   *   实测「点击 → 连抓三帧」，内容区（y<2400）三帧**逐像素完全一致** → 页面是瞬跳的，
+   *   只有底栏在变（滑块在补间）。换曲线（Friction / FastOutSlowIn）、摘掉动画回调都一样；
+   *   而早前那次「滑块被瞬时写入、没有逐帧改动状态」的版本反倒能看到中间位移 ——
+   *   结论：**过渡期间逐帧改 tabProgress 引发的重渲染会把 Swiper 的过渡动画打断成瞬跳**。
+   * 所以改为与手指拖拽完全同一套机制：`startFakeDrag` + 逐帧 `fakeDragBy`，
+   * 页面位移与滑块共用同一个 p → 天生同步、也不受重渲染影响（fakeDragBy 是显式位移）。
+   */
   private switchTab(i: number): void {
     if (this.curTab === i) {
+      console.info(`[Tab] switch ${i} 被忽略（curTab 已是该页）`);
       return;
     }
     this.curTab = i;
-    this.swiperCtl.changeIndex(i);
+    this.startSelfAnim(i, TAB_ANIM_MS);
+  }
+
+  /**
+   * 启动一段自绘平移动画：从当前进度平滑推到 to（页面与滑块共用同一个 p）。
+   * 点击切换（300ms）与松手吸附（180ms）都走这里 —— 两种场景必须是**同一套判决**，
+   * 否则会出现「页面按速度甩过去了、滑块按过半规则被弹回来」的错位。
+   */
+  private startSelfAnim(to: number, ms: number): void {
+    this.stopTapAnim(false, true); // 只清定时器，保留 fakeDrag 会话（内容不会跳）
+    this.tapFrom = this.tabProgress;
+    this.tapTo = to;
+    this.tapAnimMs = ms;
+    this.tapStartTs = Date.now();
+    this.dragStartProgress = this.tapFrom; // 内容位移以动画起点为原点（driveContent 的换算基准）
+    this.dragApplied = 0;
+    this.islandSettling = true;            // 动画期间禁止索引/内容位置回写覆盖滑块
+    if (!this.fakeDragging) {
+      try {
+        this.fakeDragging = this.swiperCtl.startFakeDrag();
+      } catch (err) {
+        this.fakeDragging = false;
+      }
+    }
+    if (!this.fakeDragging) {
+      // 模拟拖拽不可用（API < 23）：退化为直接切页 + 滑块瞬时归位
+      this.islandSettling = false;
+      this.tabProgress = to;
+      this.curTab = to;
+      try {
+        this.swiperCtl.changeIndex(to);
+      } catch (err) {
+      }
+      return;
+    }
+    this.tapTimer = setInterval(() => this.tickTapAnim(), TAB_ANIM_TICK_MS);
+  }
+
+  /** 自绘平移动画的一帧：easeOutCubic 缓动推进 p，同时驱动滑块与内容 */
+  private tickTapAnim(): void {
+    const k: number = Math.min(1, (Date.now() - this.tapStartTs) / this.tapAnimMs);
+    const eased: number = 1 - Math.pow(1 - k, 3);
+    const p: number = this.tapFrom + (this.tapTo - this.tapFrom) * eased;
+    this.tabProgress = p;
+    this.driveContent(p);
+    if (k >= 1) {
+      this.stopTapAnim(true, false);
+    }
+  }
+
+  /**
+   * 结束自绘平移动画。
+   * settle=true → 收口：结束模拟拖拽、把页号**钉死**在 tapTo（`changeIndex(to, false)` 无动画落位）、
+   *   进度归位并短暂屏蔽回写。钉死这一步是关键：fakeDrag 结束瞬间 Swiper 会按**残留速度**自行吸附，
+   *   那套判决与我们的「过半吸附」不一致 → 不钉就会「页面甩走了、滑块弹回来」。
+   * keepFake=true → 只清定时器、保留 fakeDrag 会话（用于「重开动画前」的清理，内容不跳）。
+   */
+  private stopTapAnim(settle: boolean, keepFake: boolean): void {
+    if (this.tapTimer !== -1) {
+      clearInterval(this.tapTimer);
+      this.tapTimer = -1;
+    }
+    if (this.fakeDragging && !keepFake) {
+      try {
+        this.swiperCtl.stopFakeDrag();
+      } catch (err) {
+      }
+      this.fakeDragging = false;
+    }
+    this.dragApplied = 0;
+    if (settle) {
+      this.tabProgress = this.tapTo;
+      this.curTab = this.tapTo;
+      try {
+        this.swiperCtl.changeIndex(this.tapTo, false); // 无动画钉死页号，压掉 Swiper 自己的速度判决
+      } catch (err) {
+      }
+      this.islandSettling = true;
+      setTimeout(() => {
+        this.islandSettling = false;
+      }, 260);
+    }
+  }
+
+  /** 点击 tab 区域切换（拖动刚结束时短暂屏蔽，避免拖拽尾巴被识别成点击） */
+  private tapTab(i: number): void {
+    if (Date.now() < this.suppressClickUntil) {
+      return;
+    }
+    this.switchTab(i);
+  }
+
+  /** 点击中缝加号（同样屏蔽拖拽尾巴，否则从加号上起拖、松手会顺势弹出新建弹层） */
+  private tapFab(): void {
+    if (Date.now() < this.suppressClickUntil) {
+      return;
+    }
+    this.openAddSheet();
+  }
+
+  /**
+   * 底栏拖拽交互（**滑块手柄口径**，主人 2026-09-16 08:25 明确）：
+   *   ① 滑块本身 1:1 跟手指走 —— 手指位移直接换算成滑块位移，跨过「一个滑块行程(含 FAB 中缝)」= 一页；
+   *   ② 页面的位移沿用滑块原有比例（页面进度 = 滑块进度），通过 `driveContent` 下发给 Swiper。
+   *   方向：手指右移 = 滑块右移 = 选中右侧的「时间线」。
+   */
+  private onIslandTouch(e: TouchEvent): void {
+    if (e.touches.length === 0) {
+      return;
+    }
+    const x: number = e.touches[0].windowX;
+    if (e.type === TouchType.Down) {
+      if (this.tapTimer !== -1) {
+        // 手指按下：先把还在跑的自绘动画落位收口，避免动画与手指抢控制权
+        this.stopTapAnim(true, false);
+      }
+      this.dragStartX = x;
+      this.dragStartProgress = this.tabProgress;
+      this.islandDragging = false;
+      this.dragApplied = 0; // 新一轮拖动：已下发位移清零
+    } else if (e.type === TouchType.Move) {
+      const dx: number = x - this.dragStartX;
+      // 超过 6vp 才判定为拖动，避免误吞正常点击
+      if (!this.islandDragging && Math.abs(dx) > 6) {
+        this.islandDragging = true;
+        // 开启 Swiper 模拟拖拽（startFakeDrag @since 23）：让页面内容也 1:1 跟手。
+        // ⚠️ 只在尚未开启时开启：已开启时 startFakeDrag() 会返回 false，若据此把标志置 false 就会「内容不动」。
+        if (!this.fakeDragging) {
+          try {
+            this.fakeDragging = this.swiperCtl.startFakeDrag() ? true : this.swiperCtl.isFakeDragging();
+          } catch (err) {
+            this.fakeDragging = false; // API < 23 无此能力 → 仅滑块跟手，松手再切页
+          }
+        }
+      }
+      if (this.islandDragging) {
+        // 换算基准 = 滑块自身行程：手指走完「一个 tab 宽 + FAB 中缝」= 滑块走完一页 ✓ 滑块 1:1 跟手
+        const unit: number = this.tabWidth() + FAB_GAP;
+        if (unit > 0) {
+          let p: number = this.dragStartProgress + dx / unit;
+          p = p < 0 ? 0 : (p > 1 ? 1 : p);
+          this.tabProgress = p;
+          // 页面位移跟着滑块进度走（同一 p，页面跨度为 pageW）→ 页面按滑块比例平移
+          this.driveContent(p);
+        }
+      }
+    } else if (e.type === TouchType.Up || e.type === TouchType.Cancel) {
+      if (this.islandDragging) {
+        const target: number = this.tabProgress >= 0.5 ? 1 : 0;
+        this.islandDragging = false;
+        this.suppressClickUntil = Date.now() + 300;
+        // 一行对账日志：p = 手指算出的进度，contentP = Swiper 上报的内容进度；两者应几乎相等（联动正常）
+        console.info(`[Drag] up p=${this.tabProgress.toFixed(3)} contentP=${this.contentP.toFixed(3)} target=${target}`);
+        // 松手吸附同样**自绘**：页面与滑块共用同一个 p、同一套「过半」判决，并在收口时把页号钉死。
+        // 旧写法「stopFakeDrag 交给 Swiper 自己吸附 + 滑块另外 animateTo」是两套判决 → 会错位。
+        this.startSelfAnim(target, DRAG_SNAP_MS);
+      } else {
+        // 只是点了一下没拖动：解除 Down 时留下的屏蔽位
+        this.islandSettling = false;
+      }
+    }
+  }
+
+  /**
+   * 把 Swiper 内容推到进度 p 对应的位置（页面跟手）。
+   *
+   * ⚠️⚠️ 关键坑：`fakeDragBy(offset)` 是**增量**语义（每次调用把内容按 offset 再挪一段），
+   *      不是「设置绝对位移」。若每次传累计值，内容会把历次累计量反复叠加 ——
+   *      hilog 实测：手指 p 才 0.08，内容 contentP 已被叠到 1.0 顶死边界（然后 consumed=false），
+   *      表现就是「滑块没怎么动、页面已经飞到头」的脱节感。故这里只下发**本次增量** = want - applied。
+   *
+   * fakeDragBy 方向：正数 = 拖向起始页（内容右移），负数 = 拖向末尾页（内容左移）。
+   * 目标位移 want = -(p - 拖动起点进度) × 页宽：p 变大 → 内容左移 → 露出右侧页。
+   */
+  private driveContent(p: number): void {
+    if (!this.fakeDragging || this.pageW <= 0) {
+      return;
+    }
+    const want: number = -(p - this.dragStartProgress) * this.pageW;
+    const delta: number = want - this.dragApplied;
+    if (delta === 0) {
+      return;
+    }
+    // 越界时 Swiper 返回 false（不消费）→ 不推进已下发量，避免留下虚假位移导致反弹不跟手
+    if (this.swiperCtl.fakeDragBy(delta)) {
+      this.dragApplied = want;
+    }
   }
 
   // ============ 首尾留白：与悬浮栏等高，让首/末项停栏边，同时内容可从栏背后穿过 ============
@@ -293,6 +522,29 @@ struct Index {
   /** 顶部留白高度 = 顶栏内容高 + 状态栏 + 呼吸量（事件页与时间线页共用 → 两页起始高度严格一致） */
   private topPad(): number {
     return TOPBAR_CONTENT_H + this.statusBarH + PAGE_TOP_GAP;
+  }
+
+  /**
+   * 顶栏「满模糊平台」末端在材质层高度中的比例。
+   * 材质层高 = statusBarH + TOPBAR_CONTENT_H + TOPBAR_FADE_H；平台要盖住「状态栏 + 标题区」（标题文字
+   * ink 底其实只到 statusBarH+~95，这里留 10vp 余量给收束起头），所以：
+   *   ratio = (statusBarH + TOPBAR_CONTENT_H − 10) / 材质层高
+   * 用运行时值计算，换设备（状态栏高度不同）也不会让标题区落进收束段。
+   */
+  private fadePlatformRatio(): number {
+    const body: number = this.statusBarH + TOPBAR_CONTENT_H;
+    const total: number = body + TOPBAR_FADE_H;
+    if (total <= 0) {
+      return 0.7;
+    }
+    const r: number = (body - 10) / total;
+    return r < 0 ? 0 : (r > 0.95 ? 0.95 : r);
+  }
+
+  /** 收束段内第 k 点（0~1）在材质层高度中的比例：从平台末端线性铺到材质底边 */
+  private fadeTaperAt(k: number): number {
+    const r: number = this.fadePlatformRatio();
+    return r + (1 - r) * k;
   }
 
   /** 底部留白高度 = 底栏占位 + 小白条 */
@@ -325,29 +577,37 @@ struct Index {
 
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
-      // ---------- 时间轴灰线底（页面级固定，不随滚动）：列表限位正常，overscroll 回弹只露灰线、尽头不漏空 ----------
-      // x=26vp：列表 padding 16 + 线区 Stack(22) 内线中心 11 - 半宽 1；opacity 跟随 tab 进度（事件页 0、时间线 1）
-      Column()
-        .width(2)
-        .height('100%')
-        .backgroundColor(this.theme().outline)
-        .position({ x: 26, y: 0 })
-        .opacity(this.tabProgress)
-
       // ---------- 内容层：双页撑满全屏，滚动内容从悬浮玻璃栏底下穿过 ----------
-      Swiper(this.swiperCtl) {
-        this.EventsPage()
-        this.TimelinePage()
-      }
-      .index(this.curTab)
+      // 注：时间轴的「超长灰线底」已挪进 TimelinePage 内部（见该 Builder），不再挂在根 Stack —— 详见那里的注释。
+      // ⚠️ 外层 Tabs 只为「沉浸光感生效范围」服务：官方文档明确 uiMaterial.systemMaterial 仅在
+      //    Navigation/NavDestination 标题栏、或「横向 Tabs + barPosition=End」的底部 TabBar 内生效，
+      //    其他区域系统直接判 Material inactive: out of scope（只剩静态高斯模糊，不跟随系统光感控件）。
+      //    故把底部胶囊岛挂成 Tabs 的 tabBar（只放 1 个 TabContent → 单 tab 占满整条 bar 宽）；
+      //    页面切换与跟手进度仍由内部 Swiper 承担，Tabs 单页不抢横向滑动手势，两者互不冲突。
+      Tabs({ barPosition: BarPosition.End }) {
+        TabContent() {
+          Swiper(this.swiperCtl) {
+            this.EventsPage()
+            this.TimelinePage()
+          }
+      // ⚠️ 不要绑 `.index(this.curTab)`：点击切换要靠 changeIndex 的平移动画，绑定后动画途中重渲染会把旧页码写回去 → 变成瞬跳。
+      //    页码以 Swiper 自身为准，通过 onChange 回写 curTab。
       .loop(false)
       .indicator(false)
-      .duration(220)
+      .duration(220) // 手势翻页/吸附时长（点击切换走自绘动画，不用它）
       .curve(Curve.Friction)
       .width('100%')
       .height('100%')
       .onContentDidScroll((selectedIndex: number, index: number, position: number, mainAxisLength: number) => {
         if (index !== 0) {
+          return;
+        }
+        // 对账探针：记录 Swiper 自己上报的内容进度（拖拽/吸附期间也记，便于核对是否与手指一致）
+        const clampP: number = position < 0 ? -position : position;
+        const norm: number = (clampP > 1 && mainAxisLength > 0) ? clampP / mainAxisLength : clampP;
+        this.contentP = norm < 0 ? 0 : (norm > 1 ? 1 : norm);
+        // 拖拽底栏滑块 / 吸附动画期间由手指驱动进度，禁止内容位置回写 tabProgress（否则进度被拉回整数、滑块不跟手）
+        if (this.islandDragging || this.islandSettling) {
           return;
         }
         // ⚠️ position 是「归一化页偏移」（SDK 原文：页0 的 translate = -position × mainAxisLength），不是像素。
@@ -359,15 +619,80 @@ struct Index {
       })
       .onChange((i: number) => {
         this.curTab = i;
+        if (this.islandDragging) {
+          return;
+        }
+        if (this.islandSettling) {
+          // 点击切换的过渡动画进行中：滑块由 switchTab 的 animateTo 补间，这里不得瞬跳覆盖
+          // 屏蔽位由 animateTo.onFinish / 兜底定时器解除，不在这里清
+          return;
+        }
         this.tabProgress = i; // 兜底：静止时进度与页号一致
       })
+        }
+        .tabBar(this.BottomBar())
+      }
+      // barOverlap：TabBar 悬浮叠在内容之上（保留「内容从玻璃岛背后滚过」的视觉）；
+      // barHeight = 胶囊岛 56 + 下边距 12 + 小白条导航区高；bar 底透明，避免系统默认底色挡住内容。
+      .barOverlap(true)
+      .barHeight(ISLAND_H + 12 + this.navBarH)
+      // ⚠️ 必须显式清掉 Tabs 自带 bar 背景：系统在 API 26 会给底部 TabBar 铺一层**矩形**系统材质，
+      //    叠加在胶囊岛外侧就变成主人看到的「方形遮罩」。置透明 + NONE 后只剩胶囊岛自己的玻璃。
+      .barBackgroundColor(Color.Transparent)
+      .barBackgroundBlurStyle(BlurStyle.NONE)
+      .barMode(BarMode.Fixed)
+      .width('100%')
+      .height('100%')
 
-      // ---------- 顶栏：独立悬浮贴顶（position 定位，只占自身高度，不遮挡下方列表点击） ----------
-      // 顶栏（标题 + ⋮）：高斯模糊玻璃，透出下方滚动内容
-      Row() {
+      // ---------- 顶栏：独立悬浮贴顶（Stack 内位于内容层之上，只占自身高度，不遮挡下方列表点击） ----------
+      // 顶栏（标题 + ⋮）：实时高斯模糊玻璃，透出下方滚动内容。
+      // ⚠️ 顶栏无法走 systemMaterial：官方限定沉浸光感只在 Navigation 标题栏 / 底部 TabBar 生效（见 Theme.ets 注释），
+      //    硬调会被判 out of scope → 材质失效且背景全透。故这里用 backgroundEffect 做「观感等效」的液态玻璃，
+      //    另用底部渐隐带消解硬边，避免时间线内容被生硬地「切」进模糊区。
+      Stack({ alignContent: Alignment.TopStart }) {
+        // ① 材质层：实时高斯模糊 + 材质色。
+        //    关键在 linearGradientBlur（官方 linearGradientBlur @since 12）：给「材质层自身」按竖直方向
+        //    渐减模糊强度 —— 上半段保持实模糊、下半段逐步化开到 0，于是模糊区的下边缘不再是一条硬切线，
+        //    内容滚入顶栏时是「渐渐糊掉」而不是「到某条线突然糊」。内容层是兄弟节点，不受此模糊影响（标题始终清晰）。
+        //    ⚠️ 只做「实时模糊 + 极低 tint」，**不加投影/描边**：实测设置页顶栏底色与页面背景完全一致
+        //       （标题区/下方/卡片缝隙多点采样均 #EFF3F6，无阴影无描边）→ 投影会在模糊区下缘压出一条暗带，
+        //       正好与「不生硬」相反。
+        Column()
+          .width('100%')
+          .height('100%')
+          // 纯模糊、不加 tint（主人 2026-09-16 拍板对齐第一方）：栏底与页面背景同色，只把背后内容糊掉。
+          //
+          // ⚠️ 模糊「过渡生硬」的两条根因（逐行像素实测）：
+          //   ① `backgroundEffect` 的**均匀背板模糊在材质层底边是硬截断**的 —— 越靠边它越明显；
+          //      实测红色细线峰值在 y440→520 只用了 ~23vp 就从 32 冲到 170（锐利态），等于「一刀切」。
+          //      对策：**背板模糊半径下调 20 → 10**，把这条硬边的高度砍半；主模糊改由带梯度的 linearGradientBlur 承担。
+          //   ② 单段线性 ramp 收得太快 → 改成多段渐进（模糊系数随高度平缓衰减），拖长过渡区间。
+          // 背板模糊只给 3：它的作用是「把背后的内容捕获进材质层」，好让 linearGradientBlur 有的可糊；
+          // 它本身是均匀模糊、底边必然硬截断，**半径越小这条硬边的幅度越小**（实测半径 20→10 已减弱一半）。
+          // 主模糊全部交给可以随高度渐变的 linearGradientBlur（半径 42）。
+          .attributeModifier(new GlassColumnModifier(GLASS_BLUR_ONLY, 3))
+          // 半径 42（强度只增不减）。
+          // ⚠️ 平台末端必须**按当前设备的状态栏高度动态算**（见 fadePlatformRatio）：写死比例会因
+          //    状态栏高度不同而错位 —— 一旦平台末端低于标题区底边，标题下半部就落进收束段、糊度被削弱。
+          .linearGradientBlur(42, {
+            // 平台 0~fadePlatformRatio()：盖住状态栏 + 标题区（留 10vp 余量）→ 标题背后始终是「实模糊」；
+            // 之后 5 段收束（1 → .75 → .25 → 0）走完剩下的渐隐区 → 长而软，不硬切。
+            // ⚠️ 段数不是越多越好：实测 11 段余弦 ramp 反而比 5 段更「不糊」（疑似实现内部量化），故用 5 段。
+            fractionStops: [
+              [1, 0.0],
+              [1, this.fadePlatformRatio()],
+              [0.75, this.fadeTaperAt(0.33)],
+              [0.25, this.fadeTaperAt(0.72)],
+              [0, 1.0]
+            ],
+            direction: GradientDirection.Bottom
+          })
+
+        // ② 内容层：标题 + ⋮（高度只到状态栏+内容高，保证文字不被压到渐隐区里）
+        Row() {
           Column() {
-            Text('时间戳记录')
-              .fontSize(22)
+            Text('时间戳记录器')
+              .fontSize(24) // 对齐鸿蒙第一方（设置页）大标题：ink 高 ≈23.4vp → fontSize 24
               .fontWeight(FontWeight.Bold)
               .fontColor(this.theme().onSurface)
             Text('管理事件 · 一键记录 · 桌面快捷')
@@ -390,20 +715,14 @@ struct Index {
         }
         .width('100%')
         .height(TOPBAR_CONTENT_H + this.statusBarH)
-        .padding({ left: 20, right: 8, top: this.statusBarH, bottom: 8 })
+        // left 16：与列表卡片左缘同一条竖线（设置页标题 x=56px=16vp，与其卡片对齐）
+        .padding({ left: 16, right: 8, top: this.statusBarH, bottom: 8 })
         .alignItems(VerticalAlign.Center)
-        // 沉浸光感（液态玻璃）：API 26 设备用 uiMaterial.ImmersiveMaterial 真·透出背后滚动内容；
-        // 低版本降级实时高斯模糊。旧版 glassToolbar（alpha 75%）等同「不透明方块」，把背后内容全挡住了。
-        .attributeModifier(new GlassRowModifier(this.theme().glassBar))
-
-      // ---------- 底栏：独立悬浮贴底（markAnchor+position 锚到容器底边，只占自身高度，不遮挡列表） ----------
-      Column() {
-        // ---------- 底部胶囊岛（事件 / 时间线 + 居中加号） ----------
-        this.BottomBar()
       }
       .width('100%')
-      .markAnchor({ x: 0, y: '100%' })
-      .position({ x: 0, y: '100%' })
+      .height(TOPBAR_CONTENT_H + this.statusBarH + TOPBAR_FADE_H)
+
+      // ---------- 底栏：已上移为 Tabs 的 tabBar（见上方注释），此处不再重复挂载 ----------
 
       // ---------- 新建 / 编辑事件弹层 ----------
       if (this.showAdd) {
@@ -420,6 +739,14 @@ struct Index {
     .linearGradient({
       angle: 135,
       colors: [[this.theme().bgStart, 0.0], [this.theme().bgCenter, 0.5], [this.theme().bgEnd, 1.0]]
+    })
+    .onAreaChange((_oldVal: Area, newVal: Area) => {
+      // 页面宽度（vp）：拖拽底栏滑块时用它换算内容位移，同时供时间轴灰线跟随页面平移
+      const w: number = (typeof newVal.width === 'number') ?
+        newVal.width : parseFloat(newVal.width.toString());
+      if (!Number.isNaN(w) && w > 0) {
+        this.pageW = w;
+      }
     })
   }
 
@@ -750,8 +1077,21 @@ struct Index {
 
   @Builder
   TimelinePage() {
-    Column() {
-      if (this.tlGroups.length === 0) {
+    Stack({ alignContent: Alignment.TopStart }) {
+      // ---------- 时间轴「超长灰线底」----------
+      // x=26vp：列表 padding 16 + 线区 Stack(22) 内线中心 11 - 半宽 1，与时间轴竖线严格对齐。
+      // ⚠️ 必须挂在**页面内部**（TimelinePage 自己的 Stack 里），而不是根 Stack：
+      //    它是页面的一部分，左右滑页 / 滚到尽头继续左滑的 overscroll 弹性位移时，都跟着页面一起走。
+      //    挂在根 Stack 时位置只能由「钳制到 0~1 的 tabProgress」推出来 —— 超出末页继续左滑时
+      //    Swiper 内容弹性左移、这条线却钉在 x=26 不动，就露出主人看到的「多余的灰色线」。
+      Column()
+        .width(2)
+        .height('100%')
+        .backgroundColor(this.theme().outline)
+        .position({ x: 26, y: 0 })
+
+      Column() {
+        if (this.tlGroups.length === 0) {
         Column() {
           Text('还没有任何记录')
             .fontSize(15)
@@ -794,6 +1134,9 @@ struct Index {
         // 不吸顶：月份头要和普通记录节点一样随内容滑动、可滑出屏幕。
         // 旧版 sticky(StickyStyle.Header) 把月份钉死在额头下方（主人反馈「堆到额头下」）
       }
+      }
+      .width('100%')
+      .height('100%')
     }
     .width('100%')
     .height('100%')
@@ -953,6 +1296,8 @@ struct Index {
   BottomBar() {
     Column() {
       Stack() {
+        // ⚠️ 本 builder 现在挂在 Tabs.tabBar 上：根 Column 需显式撑满 bar 高度，
+        //    否则 tabBar 内自适应高度会让胶囊岛贴顶、底部 navBar 留白丢失。
         // 跟手滑块（底层）：宽度 = 单个 tab，x 随 tabProgress 连续移动（不加 animation，保证 1:1 跟手）
         if (this.tabWidth() > 0) {
           Row() {}
@@ -976,7 +1321,7 @@ struct Index {
           .layoutWeight(1)
           .height('100%')
           .justifyContent(FlexAlign.Center)
-          .onClick(() => this.switchTab(0))
+          .onClick(() => this.tapTab(0))
 
           // FAB 中缝禁区（对齐 fab_glass_gap 60dp）：加号圆钮嵌在岛正中心
           Column() {
@@ -988,7 +1333,7 @@ struct Index {
             .borderRadius(FAB_SIZE / 2)
             .backgroundColor(this.theme().primary)
             .shadow({ radius: 12, color: '#331565C0', offsetY: 4 })
-            .onClick(() => this.openAddSheet())
+            .onClick(() => this.tapFab())
           }
           .width(60)
           .height('100%')
@@ -1005,7 +1350,7 @@ struct Index {
           .layoutWeight(1)
           .height('100%')
           .justifyContent(FlexAlign.Center)
-          .onClick(() => this.switchTab(1))
+          .onClick(() => this.tapTab(1))
         }
         .width('100%')
         .height('100%')
@@ -1013,10 +1358,13 @@ struct Index {
       }
       .width('100%')
       .height(ISLAND_H)
-      // 液态玻璃悬浮岛：API 26 用 ImmersiveMaterial 真·透光（透出背后滚动的时间线）；
-      // 低版本降级实时高斯模糊。滑块/边框/圆角由常规链路上层叠加，互不冲突。
-      .attributeModifier(new GlassStackModifier(this.theme().glassBar))
+      // 液态玻璃悬浮岛：本组件挂在 Tabs.tabBar 上（= 系统认定的底部 TabBar），inScope=true
+      // → API 26 走 ImmersiveMaterial 真·跟随系统沉浸光感；范围外/低版本降级实时高斯模糊。
+      .attributeModifier(new GlassStackModifier(this.theme().glassBar, 28, true))
       .borderRadius(28)
+      // ⚠️ systemMaterial 的材质层按组件矩形渲染、**不跟随 borderRadius** → 不加 clip 会露出方形玻璃块。
+      //    clip(true) 让材质/背景一起按 28 圆角裁剪，胶囊岛才是真·悬浮圆角岛。
+      .clip(true)
       .border({ width: 1, color: this.theme().glassStroke })
       .margin({ left: 16, right: 16, bottom: 12 })
       .onAreaChange((_oldVal: Area, newVal: Area) => {
@@ -1029,7 +1377,10 @@ struct Index {
       })
     }
     .width('100%')
+    .height('100%')
     .padding({ bottom: this.navBarH })
+    // 底栏拖拽：按住胶囊岛横向拖动即可切换页面（滑块 1:1 跟手，松手吸附）
+    .onTouch((e: TouchEvent) => this.onIslandTouch(e))
   }
 
   /** 悬浮加号：已并入底部胶囊岛中缝（P1-4 修复 align 失效） */
