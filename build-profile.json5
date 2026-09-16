@@ -1,33 +1,21 @@
 {
   "app": {
-    "signingConfigs": [
-      {
-        "name": "default",
-        "type": "HarmonyOS",
-        "material": {
-          "certpath": "C:\\Users\\Baoru Lee\\.ohos\\config\\default_TimestampRecorderHarmony_o0EoVWl1x6lKJ_-M3Xyc8bGs-cfejJ9J51uowSO68qA=.cer",
-          "keyAlias": "debugKey",
-          "keyPassword": "0000001A2D976F77B77A8AAE75DEF06778D73B59DA63C6B54184F10763C7B9F56AFE31831D02A3E8DD1D",
-          "profile": "C:\\Users\\Baoru Lee\\.ohos\\config\\default_TimestampRecorderHarmony_o0EoVWl1x6lKJ_-M3Xyc8bGs-cfejJ9J51uowSO68qA=.p7b",
-          "signAlg": "SHA256withECDSA",
-          "storeFile": "C:\\Users\\Baoru Lee\\.ohos\\config\\default_TimestampRecorderHarmony_o0EoVWl1x6lKJ_-M3Xyc8bGs-cfejJ9J51uowSO68qA=.p12",
-          "storePassword": "0000001A6FD8D9B5BD34063594D26FF814773C68CFC9666DDC58CB1E28B49E52192BD13292ACECF0E32B"
-        }
-      }
-    ],
+    // ⚠️ signingConfigs 不入库（2026-09-16 起）。
+    //    原因：material 里含签名口令（storePassword / keyPassword）与本机真实路径（C:\Users\<用户名>\...），
+    //    属敏感信息。签名配置由 DevEco Studio「自动签名」在本地生成，
+    //    或自行 File → Project Structure → Signing Configs 配置；hvigor 构建时若缺签名则产出 unsigned 包。
     "products": [
       {
-        "name": "default",
-        "signingConfig": "default",
-        "targetSdkVersion": "6.0.2(22)",
-        "compatibleSdkVersion": "6.0.2(22)",
-        "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
             "caseSensitiveCheck": true,
             "useNormalizedOHMUrl": true
           }
-        }
+        },
+        "compatibleSdkVersion": "6.0.2(22)",
+        "name": "default",
+        "runtimeOS": "HarmonyOS",
+        "targetSdkVersion": "26.0.0"
       }
     ],
     "buildModeSet": [

@@ -20,5 +20,8 @@ build_p*.log
 # 打包产物（不入库，发布走 GitHub Release）
 *.hap
 
+# DevEco CodeGenie 本地缓存（内含独立 .git，属工具本地数据）
+/.codegenie
+
 # WorkBuddy 工作数据（内部记忆，含设备信息，严禁入库）
 /.workbuddy/
