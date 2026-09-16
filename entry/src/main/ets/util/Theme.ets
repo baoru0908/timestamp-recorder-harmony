@@ -9,7 +9,9 @@ import uiMaterial from '@ohos.arkui.uiMaterial';
  * 液态玻璃统一封装（API 26 ImmersiveMaterial）。
  *
  * 跟随系统「沉浸光感」风格的三个前提（缺一不可）：
- *  1) 编译 targetSdkVersion ≥ 26.0.0(26) —— 本机 SDK 已为 HarmonyOS 26.0.0.105(API 26)，工程已提到 26。
+ *  1) 设备/系统需支持 API 26 沉浸光感：工程 targetSdkVersion=26.0.0（满足 ImmersiveMaterial 运行前提），
+ *     compatibleSdkVersion=6.0.2(22) 仅规定最低可安装版本；API 22~25 设备上 isImmersiveMaterialSupported()
+ *     返回 false，自动走下方「实时高斯模糊降级」分支，功能与观感降级但不崩溃。
  *  2) entry/module.json5 声明 metadata [{ name:"ohos.arkui.UIMaterial.state", value:"enable" }]
  *     → 应用 MaterialState 置为 ENABLE，系统材质样式优先级高于组件自身 background/blur → 真正跟随系统光感。
  *  3) 组件必须位于「沉浸光感生效范围」内：Navigation/NavDestination 标题栏，
@@ -27,24 +29,32 @@ import uiMaterial from '@ohos.arkui.uiMaterial';
  */
 type AnyGlassAttr = RowAttribute | ColumnAttribute | StackAttribute;
 
-/** 诊断用：把当前设备的沉浸光感能力打进 hilog，便于确认「是否 out of scope」 */
-function logMaterial(tag: string): boolean {
+// 模块级缓存：应用生命周期内设备沉浸光感能力不变，只需探测一次，避免每个玻璃组件重复查询 + 刷日志。
+let materialSupportedCache: boolean | null = null;
+
+/** 探测当前设备是否真正支持「系统沉浸光感」（API 26 设备 + MaterialState=ENABLE）。结果缓存复用。 */
+function isImmersiveSupported(): boolean {
+  if (materialSupportedCache !== null) {
+    return materialSupportedCache;
+  }
   let ok: boolean = false;
   try {
     const supported: boolean = uiMaterial.isImmersiveMaterialSupported();
     const state: number = uiMaterial.getMaterialInfo().state;
     ok = supported && state === uiMaterial.MaterialState.ENABLE;
-    console.info(`[Glass] ${tag}: supported=${supported} state=${state} useSystem=${ok}`);
   } catch (e) {
-    console.info(`[Glass] ${tag}: query failed`);
+    ok = false;
   }
+  materialSupportedCache = ok;
+  // 仅首次探测打一条日志（release 下也仅此一条，用于确认是否 out of scope），不再逐组件刷屏。
+  console.info(`[Glass] immersiveMaterial supported=${ok}`);
   return ok;
 }
 
 function applyGlass(attr: AnyGlassAttr, color: string, radius: number, inScope: boolean): void {
   // 三条件：①组件在生效范围（Navigation 标题栏 / 底部 TabBar）②设备/系统支持 ③应用 MaterialState=ENABLE。
   // inScope 由调用方声明：范围外的组件若强行调 systemMaterial，系统判 out of scope → 材质不生效且背景全透。
-  const useSystem: boolean = inScope && logMaterial('applyGlass');
+  const useSystem: boolean = inScope && isImmersiveSupported();
   // 兜底底色：系统材质生效时被覆盖；未生效（降级分支）时也有底，不至于整片透明。
   attr.backgroundColor(color);
   if (useSystem) {
