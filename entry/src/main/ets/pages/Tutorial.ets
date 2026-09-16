@@ -1,5 +1,4 @@
 import { common, Want } from '@kit.AbilityKit';
-import { promptAction } from '@kit.ArkUI';
 import router from '@ohos.router';
 import { getTheme, ThemeColors } from '../util/Theme';
 
@@ -30,7 +29,7 @@ struct Tutorial {
     //    且 getHostContext() 可能为空，直接 as 强转后调用会崩 → 先判空。
     const host: common.Context | undefined = this.getUIContext().getHostContext();
     if (host === undefined) {
-      promptAction.showToast({ message: '打开链接失败，请稍后再试' });
+      this.getUIContext().getPromptAction().showToast({ message: '打开链接失败，请稍后再试' });
       return;
     }
     const ctx: common.UIAbilityContext = host as common.UIAbilityContext;
@@ -40,7 +39,7 @@ struct Tutorial {
       uri: url
     };
     ctx.startAbility(want).catch(() => {
-      promptAction.showToast({ message: `未能打开浏览器，请手动访问：${url}`, duration: 4000 });
+      this.getUIContext().getPromptAction().showToast({ message: `未能打开浏览器，请手动访问：${url}`, duration: 4000 });
     });
   }
 
