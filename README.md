@@ -24,12 +24,12 @@ HarmonyOS NEXT 原生应用 · ArkTS / ArkUI 声明式 · 与 Android 版备份�
 
 <br/>
 
-<img src="docs/screenshots/home.jpg" width="21%" alt="事件列表" />
+<img src="docs/screenshots/events.jpg" width="21%" alt="事件列表" />
 <img src="docs/screenshots/timeline.jpg" width="21%" alt="时间线" />
 <img src="docs/screenshots/stats.jpg" width="21%" alt="统计" />
-<img src="docs/screenshots/widget.jpg" width="21%" alt="桌面卡片" />
+<img src="docs/screenshots/tutorial.jpg" width="21%" alt="使用教程" />
 
-<sub>事件列表 · 时间线 · 统计 · 桌面卡片 —— HarmonyOS 模拟器实拍</sub>
+<sub>事件列表 · 时间线 · 统计 · 使用教程 —— HarmonyOS 模拟器实拍</sub>
 
 </div>
 
@@ -182,7 +182,7 @@ entry/src/main/ets/
 ├─ entryability/        EntryAbility、FormConfigAbility
 └─ entrybackupability/  EntryBackupAbility —— 系统备份扩展
 
-docs/                   README 用图（鸿蒙实拍截图）
+docs/screenshots/       README 用图
 tools/                  deploy_all.sh（一键多设备构建部署）
 ```
 
