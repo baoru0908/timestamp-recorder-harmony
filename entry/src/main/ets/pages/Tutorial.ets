@@ -1,9 +1,10 @@
 import { common, Want } from '@kit.AbilityKit';
+import { promptAction } from '@kit.ArkUI';
 import router from '@ohos.router';
 import { getTheme, ThemeColors } from '../util/Theme';
 
 /** GitHub 完整图文（联网时的补充入口） */
-const TUTORIAL_URL: string = 'https://github.com/baoru0908/timestamp-recorder#tutorial';
+const TUTORIAL_URL: string = 'https://github.com/baoru0908/timestamp-recorder-harmony#tutorial';
 
 /**
  * 使用教程（App 内置原生页，离线可读）。
@@ -25,14 +26,22 @@ struct Tutorial {
 
   /** 用系统浏览器打开外链 */
   private openUrl(url: string): void {
-    // ⚠️ startAbility 在 UIAbilityContext 上，common.Context 没有该方法（编译期就会报）
-    const ctx: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    // ⚠️ startAbility 在 UIAbilityContext 上，common.Context 没有该方法（编译期就会报）；
+    //    且 getHostContext() 可能为空，直接 as 强转后调用会崩 → 先判空。
+    const host: common.Context | undefined = this.getUIContext().getHostContext();
+    if (host === undefined) {
+      promptAction.showToast({ message: '打开链接失败，请稍后再试' });
+      return;
+    }
+    const ctx: common.UIAbilityContext = host as common.UIAbilityContext;
     const want: Want = {
       action: 'ohos.want.action.viewData',
       entities: ['entity.system.browsable'],
       uri: url
     };
-    ctx.startAbility(want).catch(() => {});
+    ctx.startAbility(want).catch(() => {
+      promptAction.showToast({ message: `未能打开浏览器，请手动访问：${url}`, duration: 4000 });
+    });
   }
 
   build() {
@@ -104,7 +113,7 @@ struct Tutorial {
               .fontColor(this.theme().primary)
               .width('100%')
               .margin({ top: 12 })
-            Text('① 桌面双指捏合 / 长按空白处 →「服务卡片」；\n② 找到「时间戳记录」，按住想要的卡片拖到桌面；\n③「单事件 / 胶囊」添加后可长按「编辑」绑定事件。')
+            Text('① 桌面双指捏合 / 长按空白处 →「服务卡片」；\n② 找到「时间戳记录器」，按住想要的卡片拖到桌面；\n③「单事件 / 胶囊」添加后可长按「编辑」绑定事件。')
               .fontSize(13)
               .fontColor(this.theme().onSurfaceVariant)
               .lineHeight(20)

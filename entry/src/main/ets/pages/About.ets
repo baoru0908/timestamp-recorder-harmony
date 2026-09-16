@@ -1,10 +1,13 @@
 import { bundleManager, common, Want } from '@kit.AbilityKit';
+import { promptAction } from '@kit.ArkUI';
 import router from '@ohos.router';
 import { getTheme, ThemeColors } from '../util/Theme';
 
 const URL_PROFILE: string = 'https://github.com/baoru0908';
-const URL_REPO: string = 'https://github.com/baoru0908/timestamp-recorder';
-const URL_ISSUES: string = 'https://github.com/baoru0908/timestamp-recorder/issues';
+// ⚠️ 本 App（鸿蒙版）的源码仓库是 timestamp-recorder-harmony，不是 Android 版那个仓库：
+//    跳过去要能看到「当前这个 App」的源码、README、Release。
+const URL_REPO: string = 'https://github.com/baoru0908/timestamp-recorder-harmony';
+const URL_ISSUES: string = 'https://github.com/baoru0908/timestamp-recorder-harmony/issues';
 
 /**
  * 关于页（对齐 Android `AboutActivity`）：版本信息、开发者卡片、项目说明、开源与字体出处、GitHub 入口。
@@ -32,14 +35,23 @@ struct About {
   }
 
   private openUrl(url: string): void {
-    // ⚠️ startAbility 在 UIAbilityContext 上，common.Context 没有该方法（编译期就会报）
-    const ctx: common.UIAbilityContext = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    // ⚠️ startAbility 在 UIAbilityContext 上，common.Context 没有该方法（编译期就会报）；
+    //    且 getHostContext() 可能为空，直接 as 强转后调用会崩 → 先判空。
+    const host: common.Context | undefined = this.getUIContext().getHostContext();
+    if (host === undefined) {
+      promptAction.showToast({ message: '打开链接失败，请稍后再试' });
+      return;
+    }
+    const ctx: common.UIAbilityContext = host as common.UIAbilityContext;
     const want: Want = {
       action: 'ohos.want.action.viewData',
       entities: ['entity.system.browsable'],
       uri: url
     };
-    ctx.startAbility(want).catch(() => {});
+    // 无浏览器等场景：原先静默吞掉 → 用户以为「点了没反应」；这里明确提示并可复制地址
+    ctx.startAbility(want).catch(() => {
+      promptAction.showToast({ message: `未能打开浏览器，请手动访问：${url}`, duration: 4000 });
+    });
   }
 
   build() {
@@ -70,7 +82,7 @@ struct About {
               .height(84)
               .borderRadius(22)
               .border({ width: 1, color: this.theme().glassStroke })
-            Text('时间戳记录')
+            Text('时间戳记录器')
               .fontSize(24)
               .fontWeight(FontWeight.Bold)
               .fontColor(this.theme().onSurface)
@@ -179,7 +191,7 @@ struct About {
             .margin({ top: 12 })
             .onClick(() => this.openUrl(URL_ISSUES))
 
-          Text('时间戳记录 · 完全离线 · 无广告')
+          Text('时间戳记录器 · 完全离线 · 无广告')
             .fontSize(11)
             .fontColor(this.theme().onSurfaceVariant)
             .textAlign(TextAlign.Center)
