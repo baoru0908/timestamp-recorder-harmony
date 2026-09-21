@@ -4,6 +4,7 @@ import formProvider from '@ohos.app.form.formProvider';
 import FormExtensionAbility from '@ohos.app.form.FormExtensionAbility';
 import { Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import BuildProfile from 'BuildProfile';
 import { EventRepository } from '../data/EventRepository';
 import { buildFormData } from '../util/FormSync';
 
@@ -32,14 +33,19 @@ export default class FormAbility extends FormExtensionAbility {
   }
 
   onFormEvent(formId: string, message: string): void {
-    hilog.info(DOMAIN, 'FormAbility', 'onFormEvent formId=%{public}s message=%{public}s', formId, message);
+    // 合规：卡片消息含卡片实例与事件参数，仅 debug 包输出
+    if (BuildProfile.DEBUG) {
+      hilog.info(DOMAIN, 'FormAbility', 'onFormEvent formId=%{public}s message=%{public}s', formId, message);
+    }
     try {
       const obj: Record<string, Object> = JSON.parse(message) as Record<string, Object>;
       // 系统投递格式：{...params, params:{...}, action:"message"}，指令在 params 里
       const params: Record<string, Object> = (obj['params'] as Record<string, Object>) ?? {};
       const action: string = String(params['action'] ?? obj['action'] ?? '');
       const eventId: number = Number(params['eventId'] ?? obj['eventId'] ?? -1);
-      hilog.info(DOMAIN, 'FormAbility', 'parsed action=%{public}s eventId=%{public}d', action, eventId);
+      if (BuildProfile.DEBUG) {
+        hilog.info(DOMAIN, 'FormAbility', 'parsed action=%{public}s eventId=%{public}d', action, eventId);
+      }
       if (action === 'record' && eventId > 0) {
         new EventRepository(this.context).addRecord(eventId);
       }
