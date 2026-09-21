@@ -7,6 +7,7 @@ import formProvider from '@ohos.app.form.formProvider';
 import { EventRepository, BackupData } from '../data/EventRepository';
 import { syncAllForms } from '../util/FormSync';
 import { TimeFormat } from '../util/TimeFormat';
+import { Privacy } from '../util/Privacy';
 import { getTheme, ThemeColors } from '../util/Theme';
 
 /**
@@ -143,8 +144,35 @@ struct Settings {
     }).catch(() => {});
   }
 
-  // ---------- 排序模式 ----------
+  /**
+   * 撤回隐私同意（对齐《华为应用市场审核指南》7.6「提供简单的撤销同意方式」）。
+   * 二次确认后清空同意状态并回到合规门，由用户重新阅读、重新决定。
+   * 只清同意标记，不触碰任何本地数据。
+   */
+  private revokePrivacyConsent(): void {
+    this.getUIContext().showAlertDialog({
+      title: '撤回隐私同意',
+      message: '撤回后本应用会重新展示《隐私政策》并再次征得你的同意。你的本地数据不受任何影响。',
+      autoCancel: true,
+      alignment: DialogAlignment.Center,
+      primaryButton: {
+        value: '撤回',
+        fontColor: this.theme().primary,
+        action: () => {
+          const ctx = this.getUIContext().getHostContext() as common.Context;
+          Privacy.reset(ctx);
+          router.replaceUrl({ url: 'pages/PrivacyGate' });
+        }
+      },
+      secondaryButton: {
+        value: '取消',
+        fontColor: this.theme().outline,
+        action: () => {}
+      }
+    });
+  }
 
+  // ---------- 排序模式 ----------
   private selectSort(mode: string): void {
     if (this.repo === null || mode === this.sortMode) {
       return;
@@ -298,7 +326,7 @@ struct Settings {
 
           // ---------- 桌面卡片 ----------
           this.SectionTitle('桌面卡片')
-          this.RowAction('', '管理桌面卡片', '打开卡片管理：全部事件 / 单事件 / 胶囊 / 自定义卡片',
+          this.RowAction('', '管理桌面卡片', '打开卡片管理：全部事件 / 单事件 / 自定义卡片',
             () => this.openFormManager())
 
 
@@ -311,6 +339,8 @@ struct Settings {
           this.SectionTitle('隐私')
           this.RowAction('', '隐私政策', '数据仅存本机 · 不申请权限 · 无第三方 SDK',
             () => router.pushUrl({ url: 'pages/PrivacyDoc' }))
+          this.RowAction('', '撤回隐私同意', '重新阅读《隐私政策》，由你再次决定是否同意',
+            () => this.revokePrivacyConsent())
         }
         .width('100%')
         .padding({ top: 4, bottom: 40 })

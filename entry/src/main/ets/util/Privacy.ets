@@ -40,7 +40,14 @@ export class Privacy {
     new EventRepository(ctx).setPrefStr(KEY_AGREED_VERSION, cur.length === 0 ? 'agreed' : cur);
   }
 
-  /** 清除同意状态（调试 / 合规自查用；设置页不暴露此入口，避免用户误触绕过） */
+  /**
+   * 清除同意状态并回到合规门。
+   *
+   * 调用方：`pages/Settings` 的「撤回隐私同意」（经二次确认弹窗）。
+   * 依据《华为应用市场审核指南》7.6「提供简单的撤销同意方式」—— 必须给用户可撤回的途径，
+   * 同时用二次确认避免误触导致无谓地重新过一遍合规门。
+   * 仅清除同意标记，不触碰任何本地数据。
+   */
   static reset(ctx: common.Context): void {
     new EventRepository(ctx).setPrefStr(KEY_AGREED_VERSION, '');
   }
