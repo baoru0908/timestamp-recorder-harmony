@@ -74,6 +74,9 @@ struct FormConfig {
   aboutToAppear(): void {
     const ctx = this.getUIContext().getHostContext() as common.Context;
     this.repo = new EventRepository(ctx);
+    // ⚠️ 从磁盘重读后再操作：本页会写「卡片绑定 / 自定义配置」，
+    //    若沿用进程内过期缓存实例，写盘时可能把卡片进程刚写入的记录覆盖回去。
+    this.repo.refresh();
     const want = formConfigWant;
     if (want !== null) {
       const params: Record<string, Object> = (want.parameters as Record<string, Object>) ?? {};

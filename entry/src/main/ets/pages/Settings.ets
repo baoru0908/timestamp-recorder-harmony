@@ -18,6 +18,8 @@ import { getTheme, ThemeColors } from '../util/Theme';
 struct Settings {
   @State sortMode: string = 'manual';
   @StorageProp('isDark') isDark: boolean = false;
+  /** App 回到前台时由 EntryAbility.onForeground 递增 → 触发从磁盘重载（卡片进程可能已写入） */
+  @StorageProp('fgReloadTick') @Watch('onForegroundReload') fgReloadTick: number = 0;
   private repo: EventRepository | null = null;
 
   /** 当前语义色板（ArkUI struct 内必须用普通方法，不能用 getter） */
@@ -34,6 +36,26 @@ struct Settings {
 
   private toast(msg: string): void {
     this.getUIContext().getPromptAction().showToast({ message: msg });
+  }
+
+  /**
+   * 回到本页 / App 回到前台：丢弃进程内 Preferences 缓存后重读。
+   * 设置页会写 sort_mode；若持有过期缓存实例，写入可能把卡片进程刚写入的数据覆盖回去，
+   * 因此进入本页与回前台时都必须先刷新缓存。
+   */
+  private refreshRepo(): void {
+    if (this.repo !== null) {
+      this.repo.refresh();
+      this.sortMode = this.repo.getSortMode();
+    }
+  }
+
+  onPageShow(): void {
+    this.refreshRepo();
+  }
+
+  onForegroundReload(): void {
+    this.refreshRepo();
   }
 
   // ---------- 备份导出 ----------

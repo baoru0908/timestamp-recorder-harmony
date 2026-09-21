@@ -18,7 +18,7 @@
     },
     {
       "name": "widget_single_desc",
-      "value": "单事件大按钮：点击即记录一条"
+      "value": "单事件卡片：点击即记录一条；时间段事件为开始 / 结束切换"
     },
     {
       "name": "widget_capsule_desc",

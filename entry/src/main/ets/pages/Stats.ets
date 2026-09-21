@@ -43,6 +43,8 @@ struct Stats {
   @State intervalAvgMs: number = 0;
   @State intervalMaxMs: number = 0;
   @StorageProp('isDark') isDark: boolean = false;
+  /** App 回到前台时由 EntryAbility.onForeground 递增 → 触发从磁盘重载（卡片进程可能已写入） */
+  @StorageProp('fgReloadTick') @Watch('onForegroundReload') fgReloadTick: number = 0;
 
   private repo: EventRepository | null = null;
   private eventsCtx: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true));
@@ -73,6 +75,18 @@ struct Stats {
       }
     }
     this.compute();
+  }
+
+  /** 回到本页 / App 回到前台：丢弃进程内 Preferences 缓存后重读（卡片进程可能已写入） */
+  onPageShow(): void {
+    if (this.repo !== null) {
+      this.repo.refresh();
+      this.compute();
+    }
+  }
+
+  onForegroundReload(): void {
+    this.onPageShow();
   }
 
   /** 聚焦模式下只取指定事件，否则取全部 */

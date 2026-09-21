@@ -13,11 +13,20 @@ import {
  * 全部事件服务卡片（多事件场景主力卡，对齐 Android widget_timestamp.xml）。
  *
  * 排版规范（详见 `release/CARD_LAYOUT_SPEC.md`）：
- * - **三段式**：标题区（固定）/ 事件列表（弹性，行数由尺寸档位决定）/ 溢出提示（仅溢出时）
+ * - **三段式**：标题区（固定）/ 事件列表（弹性，行数由数据层按档位 + **真实卡片高度**截断）/
+ *   溢出提示（仅溢出时）
  * - **左基线**：标题、行内文本、溢出提示统一缩进到 `contentInset = padH + rowPadH`
  * - **行块**：左右外距 `padH`、内部左右内距 `rowPadH`、高 `rowH`、间距 `rowGap`、圆角 `rowRadius`
  * - **行内对齐**：色点 + 名称左对齐，时间右对齐（Blank 撑开），全部垂直居中
  * - **响应式**：整套参数按 `dimension` 取档（1*2 / 2*2 / 2*4 / 4*4），字号与间距同步缩放
+ *
+ * ⚠️ 已修复的排版坑（真机实测）：
+ * **行块右侧溢出**：行块同时用 `width('100%')` 与左右 `margin` 时，ArkUI 的百分比宽度
+ * 相对「父容器内容宽」计算，margin 再叠加 → 行块向右溢出 `padH`，右内距失效、右圆角丢失、
+ * 右对齐的时间被卡片边缘裁掉。故左右外距改由**外层容器 padding** 承担。
+ *
+ * 行数上限：卡片侧无法测量自身尺寸（`onAreaChange` 在 form 中不支持），
+ * 故由数据层 `FormSync` 用 **onAddForm 拿到的真实卡片高度** 计算（见 `CardData.maxRowsFit`）。
  */
 let storage = new LocalStorage();
 
@@ -78,37 +87,42 @@ struct AllEventsCard {
       } else {
         // ── 事件列表（弹性区）──
         ForEach(this.events, (ev: CardEventJson) => {
-          Row() {
-            // 色点（用圆角方块，兼容 API 24：Circle 的 fill 为 API 26 新增）
-            Row()
-              .width(this.m().dotSize)
-              .height(this.m().dotSize)
-              .borderRadius(this.m().dotSize / 2)
-              .backgroundColor(ev.color)
-            Text(ev.name)
-              .fontSize(this.m().nameSize)
-              .fontColor(CARD_TEXT)
-              .maxLines(1)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .layoutWeight(1)
-              .margin({ left: this.m().dotGap })
-            Text(ev.lastText)
-              .fontSize(this.m().timeSize)
-              .fontColor(CARD_TEXT_SUB)
-              .maxLines(1)
-              .margin({ left: this.m().dotGap })
+          // 外层容器承担左右外距 padH：避免「width('100%') + margin」的右侧溢出（见文件头说明）
+          Column() {
+            Row() {
+              // 色点（用圆角方块，兼容 API 24：Circle 的 fill 为 API 26 新增）
+              Row()
+                .width(this.m().dotSize)
+                .height(this.m().dotSize)
+                .borderRadius(this.m().dotSize / 2)
+                .backgroundColor(ev.color)
+              Text(ev.name)
+                .fontSize(this.m().nameSize)
+                .fontColor(CARD_TEXT)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+                .margin({ left: this.m().dotGap })
+              Text(ev.lastText)
+                .fontSize(this.m().timeSize)
+                .fontColor(CARD_TEXT_SUB)
+                .maxLines(1)
+                .margin({ left: this.m().dotGap })
+            }
+            .width('100%')
+            .height(this.m().rowH)
+            .padding({ left: this.m().rowPadH, right: this.m().rowPadH })
+            .borderRadius(this.m().rowRadius)
+            .backgroundColor('#26FFFFFF')
+            .alignItems(VerticalAlign.Center)
+            .onClick(() => postCardAction(this, {
+              action: 'message',
+              params: { 'action': 'record', 'eventId': ev.id }
+            }))
           }
           .width('100%')
-          .height(this.m().rowH)
-          .padding({ left: this.m().rowPadH, right: this.m().rowPadH })
-          .margin({ left: this.m().padH, right: this.m().padH, bottom: this.m().rowGap })
-          .borderRadius(this.m().rowRadius)
-          .backgroundColor('#26FFFFFF')
-          .alignItems(VerticalAlign.Center)
-          .onClick(() => postCardAction(this, {
-            action: 'message',
-            params: { 'action': 'record', 'eventId': ev.id }
-          }))
+          .padding({ left: this.m().padH, right: this.m().padH })
+          .margin({ bottom: this.m().rowGap })
         }, (ev: CardEventJson) => `${ev.id}-${ev.lastText}`)
 
         // ── 溢出提示（L4，左基线与其他内容对齐）──

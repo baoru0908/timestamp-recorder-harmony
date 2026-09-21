@@ -121,6 +121,13 @@ export default class EntryAbility extends UIAbility {
   onForeground(): void {
     // Ability has brought to foreground
     this.logInfo('Ability onForeground');
+    // ⚠️ 桌面卡片在**独立 `:form` 进程**（FormExtensionAbility）写入 preferences，
+    //    本进程 Preferences 缓存不会自动失效 → 卡片记录后 App 内不更新（需杀进程重开）。
+    //    回到前台时递增一个全局计数，页面用 @StorageProp + @Watch 监听到即「丢弃缓存 + 从磁盘重读」。
+    //    放在 onForeground 而不是仅靠页面 onPageShow：同一页面停留时切后台再回前台不会触发页面切换，
+    //    但数据可能已被卡片改写。
+    const tick: number = AppStorage.get<number>('fgReloadTick') ?? 0;
+    AppStorage.setOrCreate<number>('fgReloadTick', tick + 1);
   }
 
   onBackground(): void {

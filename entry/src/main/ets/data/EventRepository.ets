@@ -55,12 +55,42 @@ interface BackupRoot {
  */
 export class EventRepository {
   private prefs: preferences.Preferences;
+  /** 上下文（refresh 时需要用同一 context 重新获取 Preferences 实例） */
+  private ctx: common.Context;
 
   /** 数据变更回调（页面挂 syncAllForms 回刷服务卡片；FormAbility 内部不挂） */
   onChanged: (() => void) | null = null;
 
   constructor(context: common.Context) {
+    this.ctx = context;
     this.prefs = preferences.getPreferencesSync(context, { name: STORE_NAME });
+  }
+
+  /**
+   * 丢弃进程内缓存的 Preferences 实例，重新从磁盘读取。
+   *
+   * ⚠️ 为什么必须有它（Bug 修复·根因）：
+   *   服务卡片由**独立的 `:form` 进程**（FormExtensionAbility）写入 preferences；
+   *   UIAbility 进程针对同一文件缓存着自己的 Preferences 实例，
+   *   `getPreferencesSync` 之后只读内存缓存、**不会感知跨进程写入**。
+   *   于是 App 侧再 reload 也仍是旧值 —— 表现为「卡片上记录后，App 内计数/列表不更新，
+   *   直到杀掉 App 重开（进程重启后首次读盘）才更新」。
+   *   页面重新可见 / App 回到前台时调用本方法，即可拿到卡片侧写盘后的最新数据。
+   *
+   * 依据：官方 @ohos.data.preferences 文档（removePreferencesFromCacheSync）——
+   *   「实例被缓存，再次 getPreferences 从缓存读取；移除缓存后再获取会从持久化文件重新读取」。
+   */
+  refresh(): void {
+    try {
+      preferences.removePreferencesFromCacheSync(this.ctx, { name: STORE_NAME });
+    } catch (err) {
+      // 移除失败（如底层内部错误）时继续尝试直接获取，不阻塞页面
+    }
+    try {
+      this.prefs = preferences.getPreferencesSync(this.ctx, { name: STORE_NAME });
+    } catch (err) {
+      // 获取失败则保留旧实例（后续读到的仍是旧值，但不会崩溃）
+    }
   }
 
   private notifyChanged(): void {
@@ -81,17 +111,37 @@ export class EventRepository {
   private safePut(key: string, value: preferences.ValueType): void {
     try {
       this.prefs.putSync(key, value);
-      this.prefs.flush();
+      this.flushNow();
     } catch (err) {
-      }
+    }
   }
 
   private safeDelete(key: string): void {
     try {
       this.prefs.deleteSync(key);
-      this.prefs.flush();
+      this.flushNow();
     } catch (err) {
+    }
+  }
+
+  /**
+   * 落盘：优先用**同步** flush（`flushSync`，@since 14）。
+   *
+   * ⚠️ 为什么必须同步：`flush()` 是异步的（返回 Promise，当前调用点不 await）。
+   *    若写盘尚未完成就调用 `refresh()`（`removePreferencesFromCacheSync` + 重新读取），
+   *    新实例可能读到「尚未落盘的旧文件」，其后任何写入都会把旧内容整体覆盖回去 → **丢数据**。
+   *    同步落盘后，refresh() 与写入之间不再有竞争窗口。
+   *    （极老版本无 flushSync 时回退为异步 flush，保持原行为。）
+   */
+  private flushNow(): void {
+    try {
+      this.prefs.flushSync();
+    } catch (err) {
+      try {
+        this.prefs.flush();
+      } catch (err2) {
       }
+    }
   }
 
   // ---------- 事件 CRUD ----------

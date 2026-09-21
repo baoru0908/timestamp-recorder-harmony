@@ -7,7 +7,7 @@ import { hilog } from '@kit.PerformanceAnalysisKit';
 import BuildProfile from 'BuildProfile';
 import { EventRepository } from '../data/EventRepository';
 import { TimestampEvent } from '../model/TimestampEvent';
-import { PREF_FORM_META } from '../model/CardData';
+import { PREF_FORM_META, PREF_FORM_SIZE } from '../model/CardData';
 import { buildFormData, closeTrackedFds, updateOneForm } from '../util/FormSync';
 
 const DOMAIN = 0x0001;
@@ -25,6 +25,11 @@ const DOMAIN = 0x0001;
  */
 export default class FormAbility extends FormExtensionAbility {
 
+  /** 补刷一轮正在进行中（配合 {@link refreshRest} 做连点合并） */
+  private restRunning: boolean = false;
+  /** 补刷飞行期间又来了新请求：记下它的 skipFormId，本轮结束后再补一次 */
+  private restPendingSkip: string = '';
+
   onAddForm(want: Want): formBindingData.FormBindingData {
     const name: string = String(want.parameters?.[formInfo.FormParam.NAME_KEY] ?? 'all_events');
     const dim: number = (want.parameters?.[formInfo.FormParam.DIMENSION_KEY] as number) ?? 2;
@@ -33,10 +38,21 @@ export default class FormAbility extends FormExtensionAbility {
     //    刷新链路过长，FormExtensionAbility 进程被回收时会**刷新失败**（卡片停留在旧数据，
     //    表现为"点了没反应/内容回退"）。落盘映射后可以一步直接 updateForm。
     const formId: string = String(want.parameters?.[formInfo.FormParam.IDENTITY_KEY] ?? '');
-    if (formId.length > 0) {
-      new EventRepository(this.context).setPrefStr(`${PREF_FORM_META}${formId}`, `${name}|${dim}`);
+    // 宿主下发的真实卡片高度（vp）。卡片页内无法测量自身尺寸（onAreaChange 在 form 中不支持），
+    // 落盘后由 buildFormData 按真实高度截断行数，避免固定行数在不同设备 / 字体大小的卡片上溢出。
+    const cardH: number = Number(want.parameters?.[formInfo.FormParam.HEIGHT_KEY] ?? 0);
+    if (BuildProfile.DEBUG) {
+      hilog.info(DOMAIN, 'FormAbility',
+        'onAddForm name=%{public}s dim=%{public}d formId=%{public}s cardH=%{public}d', name, dim, formId, cardH);
     }
-    const data: Record<string, Object> = buildFormData(this.context, name, dim);
+    if (formId.length > 0) {
+      const repo = new EventRepository(this.context);
+      repo.setPrefStr(`${PREF_FORM_META}${formId}`, `${name}|${dim}`);
+      if (!Number.isNaN(cardH) && cardH > 0) {
+        repo.setPrefNum(`${PREF_FORM_SIZE}${formId}`, cardH);
+      }
+    }
+    const data: Record<string, Object> = buildFormData(this.context, name, dim, formId);
     return formBindingData.createFormBindingData(data);
   }
 
@@ -63,6 +79,9 @@ export default class FormAbility extends FormExtensionAbility {
         //    点时刻 → 记一条；时间段 → **开始 / 结束切换**。
         //    旧实现一律 addRecord，会让时间段卡片点一次就多一条错误的「点时刻」记录。
         const repo = new EventRepository(this.context);
+        // ⚠️ 先从磁盘重读：本卡片进程与 App（UIAbility）进程各自缓存 preferences，互不可见。
+        //    App 内刚记录过（如「开始计时」）时，若沿用本进程旧缓存会导致点击判定错误。
+        repo.refresh();
         const ev: TimestampEvent | null = repo.getEvent(eventId);
         if (BuildProfile.DEBUG) {
           hilog.info(DOMAIN, 'FormAbility', 'tap eventId=%{public}d found=%{public}s type=%{public}d',
@@ -90,8 +109,16 @@ export default class FormAbility extends FormExtensionAbility {
     } catch (err) {
       // 非 JSON 消息忽略
     }
-    // 刷新本次交互的卡片（最短链路，避免进程回收导致刷新丢失）
-    this.refreshOne(formId);
+    // 刷新卡片（两目标同时满足）：
+    // 1) 被点击的卡走**最短链**先刷 —— 保持 v1.4.2 修复效果（点击响应不丢）；
+    // 2) 再**补刷其余已添加卡片** —— 恢复跨卡一致（v1.4.2 缩短链路时丢失：
+    //    一张卡记录后其他卡不更新）。
+    // ⚠️ 仅当 refreshOne 确实走了最短链时才补刷：若它已回退到 refreshAll，
+    //    全量刷新本身就覆盖了所有卡片，再补刷会让同一批卡被刷 2~3 遍。
+    const usedFastPath: boolean = this.refreshOne(formId);
+    if (usedFastPath) {
+      this.refreshRest(formId);
+    }
   }
 
   onRemoveForm(formId: string): void {
@@ -99,7 +126,9 @@ export default class FormAbility extends FormExtensionAbility {
     closeTrackedFds(formId);
     // 清理实例元信息，避免 preferences 残留
     try {
-      new EventRepository(this.context).setPrefStr(`${PREF_FORM_META}${formId}`, '');
+      const repo = new EventRepository(this.context);
+      repo.setPrefStr(`${PREF_FORM_META}${formId}`, '');
+      repo.setPrefNum(`${PREF_FORM_SIZE}${formId}`, 0);
     } catch (err) {
     }
   }
@@ -108,17 +137,62 @@ export default class FormAbility extends FormExtensionAbility {
    * 刷新单张卡片（**最短异步链**）：
    * 用 onAddForm 落盘的 `form_meta_<formId>` 直接定位卡片类型，一步 updateForm。
    * 映射缺失（本次版本之前添加的卡片）时回退到全量刷新。
+   *
+   * @returns true = 走了最短链（调用方需自行补刷其余卡）；false = 已回退全量刷新（无需再补刷）
    */
-  private refreshOne(formId: string): void {
+  private refreshOne(formId: string): boolean {
     const meta: string = new EventRepository(this.context).getPrefStr(`${PREF_FORM_META}${formId}`, '');
     if (meta.length === 0) {
       this.refreshAll();
-      return;
+      return false;
     }
     const sep: number = meta.indexOf('|');
     const name: string = sep > 0 ? meta.substring(0, sep) : meta;
     const dim: number = sep > 0 ? Number(meta.substring(sep + 1)) : 2;
     updateOneForm(this.context, formId, name, dim).catch(() => {});
+    return true;
+  }
+
+  /**
+   * 补刷「其余」已添加卡片（**跨卡一致性**）。
+   *
+   * 背景：v1.4.2 为修「点击后刷新丢失」把刷新链路缩短为只刷被点击的卡，
+   * 副作用是**一张卡记录后其他卡不更新**。此方法枚举已发布运行中的卡片，
+   * 跳过被点击的 `skipFormId`（它已由 {@link refreshOne} 以最短链刷过），对余下卡片补刷。
+   *
+   * 说明：枚举依赖 `getPublishedRunningFormInfos`（异步），但**只影响"其余卡"的刷新时机**，
+   * 不影响被点卡的响应链路（那条仍是一步 `updateForm`），故不会退回 v1.4.2 之前的刷新丢失问题。
+   */
+  private refreshRest(skipFormId: string): void {
+    // ⚠️ 防连刷：用户连续点击 / 多条消息同时到达时，枚举+批量 updateForm 会被重复触发，
+    //    同一批卡片被刷 2~3 遍（每遍都要重读 preferences + 重建绑定数据）。
+    //    做法：飞行中不再新起一轮，只记 pending，本轮结束后用**最后一次**的 skipFormId 补刷一次。
+    if (this.restRunning) {
+      this.restPendingSkip = skipFormId;
+      return;
+    }
+    this.restRunning = true;
+    formProvider.getPublishedRunningFormInfos().then((infos) => {
+      let refreshed: number = 0;
+      infos.forEach((info) => {
+        if (info.formId === skipFormId) {
+          return;
+        }
+        updateOneForm(this.context, info.formId, info.formName, info.dimension).catch(() => {});
+        refreshed++;
+      });
+      if (BuildProfile.DEBUG) {
+        hilog.info(DOMAIN, 'FormAbility', 'refreshRest skip=%{public}s refreshed=%{public}d',
+          skipFormId, refreshed);
+      }
+    }).catch(() => {}).then(() => {
+      this.restRunning = false;
+      if (this.restPendingSkip.length > 0) {
+        const pending: string = this.restPendingSkip;
+        this.restPendingSkip = '';
+        this.refreshRest(pending);
+      }
+    });
   }
 
   private refreshAll(): void {

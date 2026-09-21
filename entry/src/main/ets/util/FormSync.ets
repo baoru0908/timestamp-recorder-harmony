@@ -9,12 +9,16 @@ import {
   CardEventJson,
   CardAllPayload,
   CardSinglePayload,
+  CardMetrics,
+  cardMetricsOf,
   dimLabel,
   maxRowsOf,
   maxRowsOfCustom,
+  maxRowsFit,
   customTextColors,
   cardCountText,
   PREF_BIND_PREFIX,
+  PREF_FORM_SIZE,
   PREF_CUSTOM_TITLE,
   PREF_CUSTOM_BG,
   PREF_CUSTOM_IMG,
@@ -114,12 +118,21 @@ function readCustomIds(repo: EventRepository): number[] {
   return ids;
 }
 
-export function buildFormData(ctx: common.Context, name: string, dim: number): Record<string, Object> {
+export function buildFormData(ctx: common.Context, name: string, dim: number,
+  formId: string = ''): Record<string, Object> {
   const repo = new EventRepository(ctx);
+  // 宿主在 onAddForm 下发的真实卡片高度（vp）；0 = 未知 → 回退档位 maxRows。
+  // 卡片页内无法测尺寸（onAreaChange 在 form 中不支持），只能在这里按真实高度截断行数。
+  const cardH: number = formId.length > 0 ?
+    repo.getPrefNum(`${PREF_FORM_SIZE}${formId}`, 0) : 0;
 
   // ---------- 自定义卡片：标题 + 背景色/背景图 + 勾选多事件 ----------
   if (name === FORM_CUSTOM) {
     const dimStr: string = dimLabel(dim);
+    // 行数上限：真实高度可放下的行数（高度未知时回退档位值）
+    const mCustom: CardMetrics = cardMetricsOf(dimStr);
+    const fitCustom: number = maxRowsFit(mCustom, cardH);
+    const cap: number = fitCustom > 0 ? fitCustom : maxRowsOfCustom(dimStr);
     const title: string = repo.getPrefStr(PREF_CUSTOM_TITLE, CUSTOM_DEFAULT_TITLE);
     const bgHex: string = colorToHex(repo.getPrefNum(PREF_CUSTOM_BG, 0xFF1A1C1E | 0));
     const imgFile: string = repo.getPrefStr(PREF_CUSTOM_IMG, '');
@@ -144,7 +157,6 @@ export function buildFormData(ctx: common.Context, name: string, dim: number): R
 
     // 勾选的事件（过滤已被删除的 id）
     const ids: number[] = readCustomIds(repo);
-    const cap: number = maxRowsOfCustom(dimStr);
     const rows: CardEventJson[] = [];
     let valid: number = 0;
     for (let i: number = 0; i < ids.length; i++) {
@@ -233,7 +245,10 @@ export function buildFormData(ctx: common.Context, name: string, dim: number): R
   };
   const events: TimestampEvent[] = repo.getEvents();
   payload.hasData = events.length > 0;
-  const cap: number = maxRowsOf(payload.dimension);
+  // 行数上限：真实高度可放下的行数（高度未知时回退档位值）
+  const mAll: CardMetrics = cardMetricsOf(payload.dimension);
+  const fitAll: number = maxRowsFit(mAll, cardH);
+  const cap: number = fitAll > 0 ? fitAll : maxRowsOf(payload.dimension);
   events.forEach((e: TimestampEvent) => {
     if (payload.events.length >= cap) {
       return;
@@ -263,7 +278,8 @@ export function buildFormData(ctx: common.Context, name: string, dim: number): R
 export function updateOneForm(ctx: common.Context, formId: string, name: string, dim: number): Promise<void> {
   // 先回收上一轮 fd，再构建新数据（避免图片 fd 泄漏）
   closeTrackedFds(formId);
-  const data: Record<string, Object> = buildFormData(ctx, name, dim);
+  // 传入 formId：buildFormData 会据此读取该卡片实例的真实高度来截断行数
+  const data: Record<string, Object> = buildFormData(ctx, name, dim, formId);
   trackFds(formId, data);
   return formProvider.updateForm(formId, formBindingData.createFormBindingData(data));
 }

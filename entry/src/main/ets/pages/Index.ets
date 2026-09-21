@@ -90,6 +90,12 @@ struct Index {
   // 沉浸式避让区高度（EntryAbility.applyImmersive 写入）：状态栏 / 小白条导航条
   @StorageProp('statusBarHeight') statusBarH: number = 0;
   @StorageProp('navBarHeight') navBarH: number = 0;
+  /**
+   * App 回到前台时由 EntryAbility.onForeground 递增。
+   * 桌面卡片在 **独立 `:form` 进程**写入 preferences，本进程缓存不会自动刷新；
+   * 该计数变化时触发本页「丢弃缓存 + 从磁盘重读」，保证卡片记录即刻反映到 App。
+   */
+  @StorageProp('fgReloadTick') @Watch('onForegroundReload') fgReloadTick: number = 0;
   // Tab 跟手滑块：0=事件页，1=时间线页；滑动过程中为 0~1 连续值（由 Swiper.onContentDidScroll 驱动）
   @State tabProgress: number = 0;
   @State islandW: number = 0; // 底部胶囊岛实测宽度（用于计算滑块宽度与位移）
@@ -147,11 +153,22 @@ struct Index {
     }
   }
 
+  /**
+   * App 回到前台：卡片（独立 `:form` 进程）可能刚写过数据，本进程的 Preferences 缓存是旧的
+   * → 直接 reload（reload 内部会先丢弃缓存、从磁盘重读）。与 onPageShow 重复触发也无副作用。
+   */
+  onForegroundReload(): void {
+    this.reload();
+  }
+
   /** 从数据层重新读取（整体替换数组以触发刷新） */
   private reload(): void {
     if (this.repo === null) {
       return;
     }
+    // ⚠️ 先丢弃进程内 Preferences 缓存、从磁盘重读：卡片在 `:form` 进程写入后，
+    //    本进程缓存不会自动失效，否则这里读到的仍是旧数据（Bug：卡片记录后 App 不更新）。
+    this.repo.refresh();
     // 事件页：手动顺序（拖拽排序后的持久化顺序）
     const events: TimestampEvent[] = this.sortManual ? this.repo.getEvents() : this.repo.getEventsByRecent();
     const next: EventRow[] = [];

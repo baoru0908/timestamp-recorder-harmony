@@ -16,6 +16,11 @@ import {
  * - 文字色由数据层按底色亮度下发（浅底自动转深字）
  * - 行块底色：有背景图或深底 → 半透明白；浅底 → 半透明黑
  *
+ * **行块右侧溢出修复**（同 AllEventsCard，见其文件头）：左右外距 `padH` 由外层容器
+ * `padding` 承担，避免「`width('100%')` + 左右 `margin`」导致行块右溢、时间被裁。
+ *
+ * 行数上限由数据层按「档位 + onAddForm 拿到的真实卡片高度」计算（见 `CardData.maxRowsFit`）。
+ *
  * 数据来源：FormAbility 构建 payload → formBindingData（含 formImages 的 fd）→ @LocalStorageProp。
  * 背景图走 `Image('memory://<bgImageKey>')`：鸿蒙卡片**不能直接读沙箱路径**，必须由
  * FormExtensionAbility 侧把图片以 fd 形式下发（详见 util/FormSync.ets 与官方 FAQ faqs-form-14）。
@@ -116,36 +121,41 @@ struct CustomCard {
         } else {
           // ── 事件列表 ──
           ForEach(this.events, (ev: CardEventJson) => {
-            Row() {
-              Row()
-                .width(this.m().dotSize)
-                .height(this.m().dotSize)
-                .borderRadius(this.m().dotSize / 2)
-                .backgroundColor(ev.color)
-              Text(ev.name)
-                .fontSize(this.m().nameSize)
-                .fontColor(this.textColor)
-                .maxLines(1)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .layoutWeight(1)
-                .margin({ left: this.m().dotGap })
-              Text(ev.lastText)
-                .fontSize(this.m().timeSize)
-                .fontColor(this.subTextColor)
-                .maxLines(1)
-                .margin({ left: this.m().dotGap })
+            // 外层容器承担左右外距 padH（见文件头说明）
+            Column() {
+              Row() {
+                Row()
+                  .width(this.m().dotSize)
+                  .height(this.m().dotSize)
+                  .borderRadius(this.m().dotSize / 2)
+                  .backgroundColor(ev.color)
+                Text(ev.name)
+                  .fontSize(this.m().nameSize)
+                  .fontColor(this.textColor)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                  .margin({ left: this.m().dotGap })
+                Text(ev.lastText)
+                  .fontSize(this.m().timeSize)
+                  .fontColor(this.subTextColor)
+                  .maxLines(1)
+                  .margin({ left: this.m().dotGap })
+              }
+              .width('100%')
+              .height(this.m().rowH)
+              .padding({ left: this.m().rowPadH, right: this.m().rowPadH })
+              .borderRadius(this.m().rowRadius)
+              .backgroundColor(this.rowBg())
+              .alignItems(VerticalAlign.Center)
+              .onClick(() => postCardAction(this, {
+                action: 'message',
+                params: { 'action': 'record', 'eventId': ev.id }
+              }))
             }
             .width('100%')
-            .height(this.m().rowH)
-            .padding({ left: this.m().rowPadH, right: this.m().rowPadH })
-            .margin({ left: this.m().padH, right: this.m().padH, bottom: this.m().rowGap })
-            .borderRadius(this.m().rowRadius)
-            .backgroundColor(this.rowBg())
-            .alignItems(VerticalAlign.Center)
-            .onClick(() => postCardAction(this, {
-              action: 'message',
-              params: { 'action': 'record', 'eventId': ev.id }
-            }))
+            .padding({ left: this.m().padH, right: this.m().padH })
+            .margin({ bottom: this.m().rowGap })
           }, (ev: CardEventJson) => `${ev.id}-${ev.lastText}`)
 
           // ── 溢出提示（L4）──

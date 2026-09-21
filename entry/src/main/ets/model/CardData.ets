@@ -75,6 +75,13 @@ export const PREF_BIND_PREFIX: string = 'form_bind_';
  * （进程回收时刷新失败的根因），落盘后可直接定位卡片类型。
  */
 export const PREF_FORM_META: string = 'form_meta_';
+/**
+ * 卡片实例真实尺寸前缀：`form_size_<formId>` → 高度（vp，数值）。
+ * 用途：卡片页内无法测量自身尺寸（`onAreaChange` 在 form 中不支持），
+ * 故在 `onAddForm` 时把宿主下发的真实高度落盘，刷新时按它计算可完整显示的行数
+ * （见 `maxRowsFit`），避免不同设备/缩放/字体下固定行数溢出。
+ */
+export const PREF_FORM_SIZE: string = 'form_size_';
 
 // —— 自定义卡片配置键（按 formName 存，与现有绑定模式一致）——
 /** 标题 */
@@ -203,13 +210,13 @@ const M_1X2: CardMetrics = {
   maxRows: 1
 };
 
-/** 2*2 标准档 */
+/** 2*2 标准档：真机实测卡片约 184×184vp → 放得下「标题区 + 3 行 + 溢出提示」 */
 const M_2X2: CardMetrics = {
   padH: 14, padTop: 12, padBottom: 10,
   titleSize: 15, hintSize: 10,
   rowPadH: 12, rowH: 32, rowPadV: 7, rowGap: 6,
   nameSize: 13, timeSize: 11, dotSize: 10, dotGap: 8, rowRadius: 12,
-  maxRows: 4
+  maxRows: 3
 };
 
 /** 2*4 竖长档 */
@@ -257,6 +264,41 @@ export function maxRowsOf(dim: string): number {
 /** 自定义卡片与外层共享同一套行数规则 */
 export function maxRowsOfCustom(dim: string): number {
   return cardMetricsOf(dim).maxRows;
+}
+
+/**
+ * 按卡片**真实高度**（vp，来自 `onAddForm` 的宿主下发值，落盘于 `PREF_FORM_SIZE`）计算可完整显示的行数。
+ *
+ * 为什么需要：`maxRows` 是「按档位估算」的保守值，但真机的卡片实际高度会随
+ * **设备 / 显示缩放 / 系统字体大小**变化 —— 一旦实际更矮，固定行数就会溢出
+ * （最后一行被卡片圆角裁掉、溢出提示被挤出卡片）。按真实高度收敛行数后，
+ * 超出的行折叠进「还有 N 个事件」，保证每行都完整可读（规范 §五）。
+ *
+ * 为什么在数据层算：卡片页内**无法测量自身尺寸**（`onAreaChange` 在 form 能力中不被支持，
+ * 编译报 11706006），只能由 `FormAbility.onAddForm` 拿到宿主下发的真实高度并落盘。
+ *
+ * 计算：可用高 = 卡片高 − 标题区 − 底部内距 − 溢出提示；
+ *       行数 = ⌊可用高 / (rowH + rowGap)⌋，并封顶到档位 `maxRows`。
+ *
+ * @returns 可显示行数；`0` 表示高度未知 → 调用方回退档位 `maxRows`。
+ */
+export function maxRowsFit(m: CardMetrics, cardH: number): number {
+  if (cardH <= 0) {
+    return 0;
+  }
+  // 标题行高与提示行高按字号的 1.4 倍估算（比实测 1.17 倍更保守 → 宁可少放一行也不裁行）
+  const titleH: number = m.padTop + m.titleSize * 1.4 + m.rowGap + 2;
+  const hintH: number = m.hintSize * 1.4 + 2;
+  const avail: number = cardH - titleH - m.padBottom - hintH;
+  const unit: number = m.rowH + m.rowGap;
+  if (unit <= 0) {
+    return 0;
+  }
+  const n: number = Math.floor(avail / unit);
+  if (n < 1) {
+    return 1;
+  }
+  return n < m.maxRows ? n : m.maxRows;
 }
 
 /**

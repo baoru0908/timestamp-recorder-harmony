@@ -47,6 +47,8 @@ struct EventDetail {
   @State editColor: number = 0;
   @State editType: number = TYPE_POINT;
   @StorageProp('isDark') isDark: boolean = false;
+  /** App 回到前台时由 EntryAbility.onForeground 递增 → 触发从磁盘重载（卡片进程可能已写入） */
+  @StorageProp('fgReloadTick') @Watch('onForegroundReload') fgReloadTick: number = 0;
 
   private repo: EventRepository | null = null;
   private timerId: number = -1;
@@ -82,10 +84,18 @@ struct EventDetail {
     this.reload();
   }
 
+  /** App 回到前台：卡片（独立 `:form` 进程）可能刚写过数据 → 直接从磁盘重载 */
+  onForegroundReload(): void {
+    this.reload();
+  }
+
   private reload(): void {
     if (this.repo === null) {
       return;
     }
+    // ⚠️ 先丢弃进程内 Preferences 缓存、从磁盘重读：卡片由独立 `:form` 进程写入，
+    //    本进程缓存不会自动失效（否则详情页在卡片记录后仍显示旧列表）。
+    this.repo.refresh();
     this.ev = this.repo.getEvent(this.eventId);
     if (this.isIntervalEvent()) {
       this.intervals = this.repo.getIntervals(this.eventId);
