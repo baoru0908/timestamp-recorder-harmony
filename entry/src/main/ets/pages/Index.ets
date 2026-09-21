@@ -2,21 +2,21 @@
 import router from '@ohos.router';
 import { EventRepository } from '../data/EventRepository';
 import { syncAllForms } from '../util/FormSync';
-import { colorToHex, EVENT_COLORS, randomEventColor, TimelineRecord, TimestampEvent } from '../model/TimestampEvent';
+import { colorToHex, EVENT_COLORS, formatDuration, randomEventColor, TimeInterval, TimelineRecord, TimestampEvent, TYPE_INTERVAL, TYPE_POINT } from '../model/TimestampEvent';
 import { TimeFormat } from '../util/TimeFormat';
 import { getTheme, ThemeColors, GlassColumnModifier, GlassStackModifier, GLASS_BLUR_ONLY } from '../util/Theme';
 import { logD } from '../util/Log';
 
-/** 列表行模型：事件 + 该事件的记录数 / 最近一条时间 */
+/** 列表行模型：事件 + 该事件的段/条数 + 进行中的区间（null = 无进行中段） */
 class EventRow {
   ev: TimestampEvent;
   count: number;
-  last: number;
+  ongoing: TimeInterval | null;
 
-  constructor(ev: TimestampEvent, count: number, last: number) {
+  constructor(ev: TimestampEvent, count: number, ongoing: TimeInterval | null) {
     this.ev = ev;
     this.count = count;
-    this.last = last;
+    this.ongoing = ongoing;
   }
 }
 
@@ -79,6 +79,7 @@ struct Index {
   @State editId: number = -1;
   @State editName: string = '';
   @State editColor: number = 0;
+  @State editType: number = TYPE_POINT; // 新建/编辑弹层选中的事件类型（点时刻 / 时间段）
   // 顶栏 ⋮ 菜单
   @State showTopMenu: boolean = false;
   // 手动排序（P1-5：设置页切换，persist 于 sort_mode；@State 保证拖柄显隐即时刷新）
@@ -94,6 +95,7 @@ struct Index {
   @State islandDragging: boolean = false; // 正在拖动底栏滑块（拖动期间由手指驱动 tabProgress）
   @State islandSettling: boolean = false; // 松手后吸附中（禁止 Swiper 回写 tabProgress，避免与滑块动画打架）
   @State pageW: number = 0; // 页面宽度 vp（拖拽驱动内容位移、时间轴灰线跟随页面平移）
+  @State tick: number = 0; // 秒表驱动：每 1s +1 触发重渲染（进行中的时间段需要实时刷新「已 xxx」）
 
   private repo: EventRepository | null = null;
   private swiperCtl: SwiperController = new SwiperController();
@@ -109,6 +111,7 @@ struct Index {
   private tapTo: number = 0;
   private tapStartTs: number = 0;
   private tapAnimMs: number = 300;   // 本次自绘动画时长（点击 300 / 松手吸附 180）        // 本次拖动中已下发给 Swiper 的累计位移（fakeDragBy 是增量，需自己记已下发量）
+  private timerId: number = -1;      // 进行中时间段的秒表定时器（有进行中段才起，无则停）
 
   /** 当前语义色板（浅/深）。⚠️ ArkUI struct 内不能用 getter（首帧 this 为 undefined 崩溃），必须用普通方法 */
   private theme(): ThemeColors {
@@ -126,6 +129,7 @@ struct Index {
   /** 页面销毁：清掉点击平移动画的定时器，避免野定时器继续改状态 */
   aboutToDisappear(): void {
     this.stopTapAnim(false, false);
+    this.stopTimer();
   }
 
   /** 页面重新可见时刷新（从详情页 / 设置页返回，补齐 ForEach 复用不刷新的缺口） */
@@ -151,10 +155,17 @@ struct Index {
     const events: TimestampEvent[] = this.sortManual ? this.repo.getEvents() : this.repo.getEventsByRecent();
     const next: EventRow[] = [];
     events.forEach((ev: TimestampEvent) => {
-      const last: number | null = this.repo!.lastRecord(ev.id);
-      next.push(new EventRow(ev, this.repo!.recordCount(ev.id), last === null ? -1 : last));
+      if (ev.isInterval()) {
+        // 时间段：count = 段数；ongoing = 进行中的那一段（null 表示没有）
+        const ongoing: TimeInterval | null = this.repo!.getOngoingInterval(ev.id);
+        next.push(new EventRow(ev, this.repo!.intervalCount(ev.id), ongoing));
+      } else {
+        // 点时刻：count = 条数；无进行中概念
+        next.push(new EventRow(ev, this.repo!.recordCount(ev.id), null));
+      }
     });
     this.rows = next;
+    this.syncTimer();
 
     // 时间线（全部记录按时间倒序 → 按月分组）。同时维护竖线渐变衔接色：
     // prev 始终是「视觉上一条（更靠上、时间更新）」的事件色，相邻段首尾同色 → 整条连续（对齐 Android TimelineLineView）
@@ -211,6 +222,7 @@ struct Index {
     this.editId = -1;
     this.editName = '';
     this.editColor = randomEventColor();
+    this.editType = TYPE_POINT;
     this.showAdd = true;
   }
 
@@ -218,6 +230,7 @@ struct Index {
     this.editId = ev.id;
     this.editName = ev.name;
     this.editColor = ev.color;
+    this.editType = ev.type;
     this.showAdd = true;
   }
 
@@ -228,10 +241,10 @@ struct Index {
       return;
     }
     if (this.editId < 0) {
-      this.repo?.addEvent(name, this.editColor);
+      this.repo?.addEvent(name, this.editColor, this.editType);
       this.getUIContext().getPromptAction().showToast({ message: `已新建「${name}」` });
     } else {
-      this.repo?.updateEvent(this.editId, name, this.editColor);
+      this.repo?.updateEvent(this.editId, name, this.editColor, this.editType);
       this.getUIContext().getPromptAction().showToast({ message: '已保存' });
     }
     this.showAdd = false;
@@ -242,6 +255,54 @@ struct Index {
     const millis: number = this.repo?.addRecord(ev.id) ?? 0;
     this.reload();
     this.getUIContext().getPromptAction().showToast({ message: `已记录 ${TimeFormat.hm(millis)}` });
+  }
+
+  /** 时间段事件：开始 / 结束切换（对齐 EventDetail.toggleInterval） */
+  private toggleInterval(ev: TimestampEvent): void {
+    const ongoing: TimeInterval | null = this.repo?.getOngoingInterval(ev.id) ?? null;
+    if (ongoing !== null) {
+      const ok: boolean = this.repo?.stopInterval(ev.id) ?? false;
+      if (ok) {
+        this.reload();
+        this.getUIContext().getPromptAction().showToast({ message: '已结束，时长已记录' });
+      }
+      return;
+    }
+    const started: boolean = this.repo?.startInterval(ev.id) ?? false;
+    if (started) {
+      this.reload();
+      this.getUIContext().getPromptAction().showToast({ message: '已开始计时' });
+    } else {
+      this.getUIContext().getPromptAction().showToast({ message: '已有进行中的时段' });
+    }
+  }
+
+  // ---------- 秒表（仅存在进行中的时间段时逐秒刷新） ----------
+
+  private syncTimer(): void {
+    let hasOngoing: boolean = false;
+    for (let i: number = 0; i < this.rows.length; i++) {
+      if (this.rows[i].ongoing !== null) {
+        hasOngoing = true;
+        break;
+      }
+    }
+    if (hasOngoing) {
+      if (this.timerId < 0) {
+        this.timerId = setInterval(() => {
+          this.tick = this.tick + 1;
+        }, 1000);
+      }
+    } else {
+      this.stopTimer();
+    }
+  }
+
+  private stopTimer(): void {
+    if (this.timerId >= 0) {
+      clearInterval(this.timerId);
+      this.timerId = -1;
+    }
   }
 
   /** 卡片 ⋮：编辑 / 删除（对齐 Android showEventMenu） */
@@ -275,10 +336,12 @@ struct Index {
   }
 
   private confirmDeleteEvent(ev: TimestampEvent): void {
-    const count: number = this.repo?.recordCount(ev.id) ?? 0;
+    const isIntervalEv: boolean = ev.isInterval();
+    const count: number = isIntervalEv ? (this.repo?.intervalCount(ev.id) ?? 0) : (this.repo?.recordCount(ev.id) ?? 0);
+    const unit: string = isIntervalEv ? '段' : '条';
     this.getUIContext().showAlertDialog({
       title: '删除事件？',
-      message: `将删除事件「${ev.name}」及其全部 ${count} 条记录，无法恢复。`,
+      message: `将删除事件「${ev.name}」及其全部 ${count} ${unit}记录，无法恢复。`,
       buttons: [
         {
           value: '删除',
@@ -976,7 +1039,7 @@ struct Index {
             }
             .id(`ev-${row.ev.id}`)
             .margin({ bottom: CARD_GAP })
-          }, (row: EventRow) => `${row.ev.id}-${row.count}-${row.last}`)
+          }, (row: EventRow) => `${row.ev.id}-${row.count}`)
           .onMove((from: number, to: number) => {
             this.moveEvent(from, to);
           })
@@ -995,6 +1058,35 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** 卡片副标题：点时刻=共 N 条；时间段=共 N 段（进行中追加「· 进行中 已 xxx」）。
+   *  读取 this.tick 以建立依赖：秒表每 1s 触发重渲染，进行中的「已 xxx」随之刷新。 */
+  private cardSubtitle(row: EventRow): string {
+    const beat: number = this.tick; // 建立 tick 依赖（不实际参与计算，避免被编译器优化掉）
+    if (row.ev.isInterval()) {
+      if (row.count === 0) {
+        return '暂无时段';
+      }
+      const base: string = `共 ${row.count} 段`;
+      if (row.ongoing !== null) {
+        return `${base} · 进行中 ${formatDuration(row.ongoing.duration() + (beat - beat))}`;
+      }
+      return base;
+    }
+    if (row.count === 0) {
+      return '暂无记录';
+    }
+    return `共 ${row.count} 条`;
+  }
+
+  /** 时间线区间条目的第二行文案（点时刻不进此方法）。读取 this.tick 建立依赖：进行中的「已 xxx」逐秒刷新 */
+  private tlIntervalSecondLine(it: TimeInterval): string {
+    const beat: number = this.tick; // 建立 tick 依赖（不参与计算，避免被优化掉）
+    if (it.isOngoing()) {
+      return `进行中 · 已 ${formatDuration(it.duration() + (beat - beat))}`;
+    }
+    return `${TimeFormat.hm(it.start)} → ${TimeFormat.hm(it.end ?? it.start)} · ${formatDuration(it.duration())}`;
   }
 
   /** 事件卡片（对齐 Android item_event.xml）：拖柄 / 色点 / 名字+信息 / ⋮ / 快捷记录胶囊 */
@@ -1026,7 +1118,7 @@ struct Index {
           .fontColor(this.theme().onSurface)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(row.last === -1 ? '暂无记录' : `最近 ${TimeFormat.hm(row.last)}`)
+        Text(this.cardSubtitle(row))
           .fontSize(13)
           .fontColor(this.theme().onSurfaceVariant)
           .margin({ top: 3 })
@@ -1046,14 +1138,37 @@ struct Index {
       .justifyContent(FlexAlign.Center)
       .onClick(() => this.showEventMenu(row.ev))
 
-      // 快捷记录胶囊（事件色 + 白色加号与计数）
+      // 快捷记录胶囊（事件色 + 白色图标）。点时刻=记一条；时间段=开始/结束切换
       Row() {
-        this.PlusIcon(13, 1.8, this.theme().white)
-        Text(`${row.count}`)
-          .fontSize(13)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.theme().white)
-          .margin({ left: 6 })
+        if (row.ev.isInterval()) {
+          if (row.ongoing !== null) {
+            // 进行中：方块「停止」图标 + 文案
+            Rect()
+              .width(12)
+              .height(12)
+              .borderRadius(3)
+              .fill(this.theme().white)
+            Text('结束')
+              .fontSize(13)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.theme().white)
+              .margin({ left: 6 })
+          } else {
+            this.PlusIcon(13, 1.8, this.theme().white)
+            Text('开始')
+              .fontSize(13)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.theme().white)
+              .margin({ left: 6 })
+          }
+        } else {
+          this.PlusIcon(13, 1.8, this.theme().white)
+          Text(`${row.count}`)
+            .fontSize(13)
+            .fontWeight(FontWeight.Bold)
+            .fontColor(this.theme().white)
+            .margin({ left: 6 })
+        }
       }
       .height(36)
       .constraintSize({ minWidth: 62 })
@@ -1062,7 +1177,13 @@ struct Index {
       .backgroundColor(colorToHex(row.ev.color))
       .borderRadius(18)
       .margin({ left: 8 })
-      .onClick(() => this.recordOnce(row.ev))
+      .onClick(() => {
+        if (row.ev.isInterval()) {
+          this.toggleInterval(row.ev);
+        } else {
+          this.recordOnce(row.ev);
+        }
+      })
     }
     .width('100%')
     .padding({ left: 10, right: 14, top: 12, bottom: 12 })
@@ -1255,19 +1376,35 @@ struct Index {
             .fontColor(this.theme().onSurface)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(TimeFormat.short(r.millis))
-            .fontSize(12)
-            .fontColor(this.theme().onSurfaceVariant)
-            .margin({ top: 3 })
+          if (r.interval !== null) {
+            // 时间段：开始 → 结束 · 时长；进行中显示「进行中 · 已 xxx」（文案在方法内计算，含 tick 依赖）
+            Text(this.tlIntervalSecondLine(r.interval))
+              .fontSize(12)
+              .fontColor(r.interval.isOngoing() ? this.theme().primary : this.theme().onSurfaceVariant)
+              .margin({ top: 3 })
+          } else {
+            Text(TimeFormat.short(r.millis))
+              .fontSize(12)
+              .fontColor(this.theme().onSurfaceVariant)
+              .margin({ top: 3 })
+          }
         }
         .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
 
-        Text(TimeFormat.relative(r.millis))
-          .fontSize(13)
-          .fontColor(this.theme().primary)
-          .margin({ left: 10 })
-          .maxLines(1)
+        if (r.interval !== null) {
+          Text(TimeFormat.relative(r.interval.start))
+            .fontSize(13)
+            .fontColor(this.theme().primary)
+            .margin({ left: 10 })
+            .maxLines(1)
+        } else {
+          Text(TimeFormat.relative(r.millis))
+            .fontSize(13)
+            .fontColor(this.theme().primary)
+            .margin({ left: 10 })
+            .maxLines(1)
+        }
       }
       .layoutWeight(1)
       .height(60)
@@ -1384,6 +1521,31 @@ struct Index {
 
   // ==================== 新建 / 编辑事件弹层 ====================
 
+  /** 类型选择（点时刻 / 时间段），对齐 Android dialog_edit_event 的 Chip 与 EventDetail.TypeChips */
+  @Builder
+  TypeChips() {
+    Row() {
+      this.TypeChip('点时刻', TYPE_POINT)
+      this.TypeChip('时间段', TYPE_INTERVAL)
+    }
+    .width('100%')
+    .margin({ top: 16, bottom: 4 })
+  }
+
+  @Builder
+  TypeChip(label: string, type: number) {
+    Text(label)
+      .fontSize(14)
+      .fontColor(this.editType === type ? '#FFFFFF' : this.theme().onSurface)
+      .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+      .borderRadius(16)
+      .backgroundColor(this.editType === type ? this.theme().primary : this.theme().inputBg)
+      .margin({ right: 10 })
+      .onClick(() => {
+        this.editType = type;
+      })
+  }
+
   @Builder
   AddSheet() {
     Column() {
@@ -1415,6 +1577,8 @@ struct Index {
         }
         .width('100%')
         .margin({ top: 14 })
+
+        this.TypeChips()
 
         Text('选择颜色')
           .fontSize(13)

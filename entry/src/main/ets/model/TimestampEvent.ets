@@ -5,6 +5,11 @@
  * 存储方式都保持一致，保证两边导出的备份可以互相导入。
  */
 
+/** 事件类型：点时刻（记录一个个瞬间） */
+export const TYPE_POINT: number = 0;
+/** 事件类型：时间段（记录 start ~ end 的区间，可开始/结束） */
+export const TYPE_INTERVAL: number = 1;
+
 /** 事件：一个可独立记录时间戳的分类 */
 export class TimestampEvent {
   id: number;
@@ -12,12 +17,20 @@ export class TimestampEvent {
   /** ARGB 颜色值。注意：与 Android 版一致，存的是**有符号 32 位 int**（可能是负数） */
   color: number;
   createdAt: number;
+  /** 记录类型：TYPE_POINT / TYPE_INTERVAL。缺省为点时刻（兼容 format 1 的老备份） */
+  type: number = TYPE_POINT;
 
-  constructor(id: number, name: string, color: number, createdAt: number) {
+  constructor(id: number, name: string, color: number, createdAt: number, type: number = TYPE_POINT) {
     this.id = id;
     this.name = name;
     this.color = color;
     this.createdAt = createdAt;
+    this.type = type === TYPE_INTERVAL ? TYPE_INTERVAL : TYPE_POINT;
+  }
+
+  /** 是否为时间段（区间）类型 */
+  isInterval(): boolean {
+    return this.type === TYPE_INTERVAL;
   }
 }
 
@@ -27,6 +40,42 @@ export interface EventJson {
   name: string;
   color: number;
   createdAt: number;
+  /** 可选：老备份（format 1）没有此字段，读时按点时刻处理 */
+  type?: number;
+}
+
+/**
+ * 时间段记录：start ~ end。
+ * `end` 未定义表示**进行中**（对齐 Android：`end` 缺省即 ongoing）。
+ * JSON.stringify 会自然丢弃 undefined，落盘结构与 Android 一致。
+ */
+export class TimeInterval {
+  start: number;
+  end?: number;
+
+  constructor(start: number, end?: number) {
+    this.start = start;
+    if (end !== undefined) {
+      this.end = end;
+    }
+  }
+
+  /** 是否进行中（未结束） */
+  isOngoing(): boolean {
+    return this.end === undefined;
+  }
+
+  /** 时长（毫秒）。进行中则以当前时间作为结束 */
+  duration(): number {
+    const e: number = this.end === undefined ? Date.now() : this.end;
+    return e - this.start;
+  }
+}
+
+/** 存储 / 备份中的区间 JSON 结构（字段名不能改，跨平台兼容红线） */
+export interface IntervalJson {
+  start: number;
+  end?: number;
 }
 
 /** 时间线条目：一条记录 + 所属事件信息（派生结构，不落盘） */
@@ -37,12 +86,16 @@ export class TimelineRecord {
   millis: number;
   // 视觉上一条（时间更新、位于本行上方）记录的事件色，用于时间线竖线两色渐变；-1 = 无（列表首条）
   prevColor: number = -1;
+  /** 时间段条目：非空表示这是一条区间记录（millis = start），用于时间线显示起止与时长 */
+  interval: TimeInterval | null = null;
 
-  constructor(eventId: number, eventName: string, eventColor: number, millis: number) {
+  constructor(eventId: number, eventName: string, eventColor: number, millis: number,
+    interval: TimeInterval | null = null) {
     this.eventId = eventId;
     this.eventName = eventName;
     this.eventColor = eventColor;
     this.millis = millis;
+    this.interval = interval;
   }
 }
 
@@ -76,4 +129,26 @@ export function colorToHex(color: number): string {
   const hex: string = ((color >>> 0) & 0xFFFFFF).toString(16);
   // ⚠️ 必须 toUpperCase：linearGradient 的运行时颜色解析不认小写 hex（实测渲染成纯色），fill 无此问题
   return '#' + hex.padStart(6, '0').toUpperCase();
+}
+
+/** 毫秒时长 → 可读文本（如 `2 小时 5 分钟`、`45 秒`）。用于区间时长展示 */
+export function formatDuration(ms: number): string {
+  if (ms < 0) {
+    ms = 0;
+  }
+  const totalSec: number = Math.floor(ms / 1000);
+  const d: number = Math.floor(totalSec / 86400);
+  const h: number = Math.floor((totalSec % 86400) / 3600);
+  const m: number = Math.floor((totalSec % 3600) / 60);
+  const s: number = totalSec % 60;
+  if (d > 0) {
+    return `${d} 天 ${h} 小时`;
+  }
+  if (h > 0) {
+    return `${h} 小时 ${m} 分钟`;
+  }
+  if (m > 0) {
+    return `${m} 分钟 ${s} 秒`;
+  }
+  return `${s} 秒`;
 }
