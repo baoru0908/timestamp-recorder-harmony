@@ -5,7 +5,8 @@
     "pages/Stats",
     "pages/Settings",
     "pages/Tutorial",
-    "pages/About",
+    "pages/PrivacyGate",
+    "pages/PrivacyDoc",
     "pages/FormConfig"
   ]
 }

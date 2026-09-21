@@ -16,11 +16,20 @@
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { display, window } from '@kit.ArkUI';
+import BuildProfile from 'BuildProfile';
+import { Privacy } from '../util/Privacy';
 
 const DOMAIN = 0x0000;
 
 export default class EntryAbility extends UIAbility {
   private mainWindow: window.Window | null = null;
+
+  /** 合规：生命周期类调试日志只在 debug 包输出，release 包静默 */
+  private logInfo(msg: string): void {
+    if (BuildProfile.DEBUG) {
+      hilog.info(DOMAIN, 'appTag', '%{public}s', msg);
+    }
+  }
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     try {
@@ -31,7 +40,7 @@ export default class EntryAbility extends UIAbility {
     // 初始化全局深浅色标志（跟随系统），页面用 @StorageProp('isDark') 绑定
     AppStorage.setOrCreate<boolean>('isDark',
       this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
-    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onCreate');
+    this.logInfo('Ability onCreate');
   }
 
   /** 系统深浅色切换时全局更新，驱动所有页面换肤 */
@@ -39,23 +48,25 @@ export default class EntryAbility extends UIAbility {
     const dark: boolean = newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
     AppStorage.setOrCreate<boolean>('isDark', dark);
     this.applyImmersive(); // 深浅色切换时同步刷新状态栏 / 导航条图标颜色
-    hilog.info(DOMAIN, 'appTag', 'colorMode changed, isDark=%{public}s', `${dark}`);
+    this.logInfo(`colorMode changed, isDark=${dark}`);
   }
 
   onDestroy(): void {
-    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onDestroy');
+    this.logInfo('Ability onDestroy');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
     // Main window is created, set main page for this ability
-    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onWindowStageCreate');
+    this.logInfo('Ability onWindowStageCreate');
 
-    windowStage.loadContent('pages/Index', (err) => {
+    // 隐私合规门：未同意当前版本则先弹《隐私政策》《用户协议》，同意后再进主页
+    const target: string = Privacy.hasAgreed(this.context) ? 'pages/Index' : 'pages/PrivacyGate';
+    windowStage.loadContent(target, (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'appTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
       }
-      hilog.info(DOMAIN, 'appTag', 'Succeeded in loading the content.');
+      this.logInfo('Succeeded in loading the content.');
     });
 
     // 沉浸式：内容延伸到状态栏 / 导航条之下，系统栏透明；避让区高度写入 AppStorage 供页面 padding
@@ -104,16 +115,16 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageDestroy(): void {
     // Main window is destroyed, release UI related resources
-    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onWindowStageDestroy');
+    this.logInfo('Ability onWindowStageDestroy');
   }
 
   onForeground(): void {
     // Ability has brought to foreground
-    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onForeground');
+    this.logInfo('Ability onForeground');
   }
 
   onBackground(): void {
     // Ability has back to background
-    hilog.info(DOMAIN, 'appTag', '%{public}s', 'Ability onBackground');
+    this.logInfo('Ability onBackground');
   }
 }
