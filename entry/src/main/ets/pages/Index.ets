@@ -1238,7 +1238,7 @@ struct Index {
                 ListItem() {
                   this.TimelineRow(r)
                 }
-              }, (r: TimelineRecord) => `${r.eventId}-${r.millis}`)
+              }, (r: TimelineRecord) => `${r.eventId}-${r.millis}-${r.interval === null ? -1 : (r.interval.end ?? -1)}`)
             }
           }, (g: TimelineGroup) => `${g.key}-${g.items.length}-${g.items.length > 0 ? g.items[0].millis : 0}`)
 

@@ -910,7 +910,7 @@ struct EventDetail {
                     })
                 )
               }
-            }, (it: TimeInterval) => `${it.start}`)
+            }, (it: TimeInterval) => `${it.start}-${it.end ?? -1}`)
           }
           .width('100%')
           .layoutWeight(1)
