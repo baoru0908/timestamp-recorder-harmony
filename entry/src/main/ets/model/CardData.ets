@@ -69,6 +69,12 @@ export const FORM_CUSTOM: string = 'custom';
 
 /** 绑定前缀：form_bind_<formName> → eventId */
 export const PREF_BIND_PREFIX: string = 'form_bind_';
+/**
+ * 卡片实例元信息前缀：`form_meta_<formId>` → `"<formName>|<dimension>"`。
+ * 用途：`onFormEvent` 只拿到 formId，靠异步反查 formName 会让刷新链路变长
+ * （进程回收时刷新失败的根因），落盘后可直接定位卡片类型。
+ */
+export const PREF_FORM_META: string = 'form_meta_';
 
 // —— 自定义卡片配置键（按 formName 存，与现有绑定模式一致）——
 /** 标题 */

@@ -27,10 +27,13 @@ class RowItem {
   ev: TimestampEvent;
   count: number;
   last: number;
-  constructor(ev: TimestampEvent, count: number, last: number) {
+  /** 列表副标题（按事件类型：点时刻「N 条记录」/ 时间段「N 段」） */
+  countText: string;
+  constructor(ev: TimestampEvent, count: number, last: number, countText: string) {
     this.ev = ev;
     this.count = count;
     this.last = last;
+    this.countText = countText;
   }
 }
 
@@ -107,7 +110,10 @@ struct FormConfig {
     const next: RowItem[] = [];
     this.repo.getEvents().forEach((ev: TimestampEvent) => {
       const last: number | null = this.repo!.lastRecord(ev.id);
-      next.push(new RowItem(ev, this.repo!.recordCount(ev.id), last === null ? -1 : last));
+      // 时间段统计「段数」、点时刻统计「条数」（对齐卡片与 Android 口径）
+      const cnt: number = ev.isInterval() ? this.repo!.intervalCount(ev.id) : this.repo!.recordCount(ev.id);
+      const label: string = ev.isInterval() ? `${cnt} 段` : `${cnt} 条记录`;
+      next.push(new RowItem(ev, cnt, last === null ? -1 : last, label));
     });
     this.rows = next;
   }
@@ -515,7 +521,7 @@ struct FormConfig {
                 .fontSize(16)
                 .fontWeight(FontWeight.Bold)
                 .fontColor(this.theme().onSurface)
-              Text(`${r.count} 条记录`)
+              Text(r.countText)
                 .fontSize(12)
                 .fontColor(this.theme().onSurfaceVariant)
                 .margin({ top: 2 })
@@ -623,7 +629,7 @@ struct FormConfig {
                       .fontSize(16)
                       .fontWeight(FontWeight.Bold)
                       .fontColor(this.theme().onSurface)
-                    Text(`${r.count} 条记录`)
+                    Text(r.countText)
                       .fontSize(12)
                       .fontColor(this.theme().onSurfaceVariant)
                       .margin({ top: 2 })
