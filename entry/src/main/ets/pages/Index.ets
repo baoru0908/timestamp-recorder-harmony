@@ -3,6 +3,7 @@ import router from '@ohos.router';
 import { EventRepository } from '../data/EventRepository';
 import { syncAllForms } from '../util/FormSync';
 import { colorToHex, EVENT_COLORS, formatDuration, randomEventColor, TimeInterval, TimelineRecord, TimestampEvent, TYPE_INTERVAL, TYPE_POINT } from '../model/TimestampEvent';
+import { ColorPickerPanel } from '../components/ColorPickerPanel';
 import { TimeFormat } from '../util/TimeFormat';
 import { getTheme, ThemeColors, GlassColumnModifier, GlassStackModifier, GLASS_BLUR_ONLY } from '../util/Theme';
 import { logD } from '../util/Log';
@@ -1551,6 +1552,8 @@ struct Index {
   @Builder
   AddSheet() {
     Column() {
+      // ⚠️ 卡片外包 Scroll 并限高：色盘展开 hex 面板后内容会超过屏高，必须可滚动
+      Scroll() {
       Column() {
         Text(this.editId < 0 ? '新建事件' : '编辑事件')
           .fontSize(18)
@@ -1588,25 +1591,13 @@ struct Index {
           .width('100%')
           .margin({ top: 16, bottom: 4 })
 
-        Flex({ wrap: FlexWrap.Wrap }) {
-          ForEach(EVENT_COLORS, (c: number) => {
-            Column()
-              .width(34)
-              .height(34)
-              .borderRadius(17)
-              .backgroundColor(colorToHex(c))
-              .border({
-                width: this.editColor === c ? 3 : 0,
-                color: this.theme().onSurface,
-                radius: 17
-              })
-              .margin(5)
-              .onClick(() => {
-                this.editColor = c;
-              })
-          }, (c: number) => `${c}`)
-        }
-        .width('100%')
+        ColorPickerPanel({
+          selected: this.editColor,
+          onPick: (c: number) => {
+            this.editColor = c;
+          }
+        })
+          .width('100%')
 
         Row({ space: 12 }) {
           Button('取消')
@@ -1633,6 +1624,9 @@ struct Index {
       .backgroundColor(this.theme().glassMenu)
       .borderRadius(18)
       .border({ width: 1, color: this.theme().glassStroke })
+      }
+      .constraintSize({ maxHeight: '92%' })
+      .scrollBar(BarState.Off)
     }
     .width('100%')
     .height('100%')

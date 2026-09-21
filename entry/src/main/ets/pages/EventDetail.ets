@@ -7,13 +7,13 @@ import { EventRepository } from '../data/EventRepository';
 import { syncAllForms } from '../util/FormSync';
 import {
   colorToHex,
-  EVENT_COLORS,
   formatDuration,
   TimeInterval,
   TimestampEvent,
   TYPE_INTERVAL,
   TYPE_POINT
 } from '../model/TimestampEvent';
+import { ColorPickerPanel } from '../components/ColorPickerPanel';
 import { TimeFormat } from '../util/TimeFormat';
 import { getTheme, ThemeColors } from '../util/Theme';
 
@@ -620,48 +620,43 @@ struct EventDetail {
         .onClick(() => {
           this.showEdit = false;
         })
-      // 面板
+      // 面板（⚠️ 内容区可滚动：色盘展开 hex 面板后总高会超过屏幕，按钮必须固定可见）
       Column() {
-        Text('编辑事件')
-          .fontSize(17)
-          .fontWeight(FontWeight.Bold)
-          .fontColor(this.theme().onSurface)
-          .width('100%')
-          .margin({ bottom: 14 })
+        Scroll() {
+          Column() {
+            Text('编辑事件')
+              .fontSize(17)
+              .fontWeight(FontWeight.Bold)
+              .fontColor(this.theme().onSurface)
+              .width('100%')
+              .margin({ bottom: 14 })
 
-        TextInput({ text: this.editName, placeholder: '事件名称' })
-          .fontSize(16)
-          .fontColor(this.theme().onSurface)
-          .backgroundColor(this.theme().inputBg)
-          .borderRadius(12)
-          .height(48)
-          .margin({ bottom: 12 })
-          .onChange((v: string) => {
-            this.editName = v;
-          })
+            TextInput({ text: this.editName, placeholder: '事件名称' })
+              .fontSize(16)
+              .fontColor(this.theme().onSurface)
+              .backgroundColor(this.theme().inputBg)
+              .borderRadius(12)
+              .height(48)
+              .margin({ bottom: 12 })
+              .onChange((v: string) => {
+                this.editName = v;
+              })
 
-        this.TypeChips()
+            this.TypeChips()
 
-        Flex({ wrap: FlexWrap.Wrap }) {
-          ForEach(EVENT_COLORS, (c: number) => {
-            Stack() {
-              if (this.editColor === c) {
-                Text('✓').fontSize(14).fontColor('#FFFFFF')
+            ColorPickerPanel({
+              selected: this.editColor,
+              onPick: (c: number) => {
+                this.editColor = c;
               }
-            }
-            .width(40)
-            .height(40)
-            .margin(6)
-            .borderRadius(20)
-            .backgroundColor(colorToHex(c))
-            .border({ width: this.editColor === c ? 2 : 0, color: this.theme().onSurface })
-            .onClick(() => {
-              this.editColor = c;
             })
-          }, (c: number) => `${c}`)
+              .margin({ bottom: 6 })
+          }
+          .width('100%')
         }
-        .width('100%')
-        .margin({ bottom: 18 })
+        .layoutWeight(1)
+        .scrollBar(BarState.Off)
+        .align(Alignment.Top)
 
         Row() {
           Text('取消')
@@ -688,8 +683,10 @@ struct EventDetail {
             .onClick(() => this.saveEdit())
         }
         .width('100%')
+        .margin({ top: 14 })
       }
       .width('100%')
+      .height('82%')
       .padding(20)
       .padding({ bottom: 30 })
       .backgroundColor(this.theme().glassMenu)

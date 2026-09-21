@@ -276,7 +276,7 @@ struct Settings {
 
           // ---------- 桌面卡片 ----------
           this.SectionTitle('桌面卡片')
-          this.RowAction('', '管理桌面卡片', '打开卡片管理：添加全部事件 / 单事件 / 胶囊卡片',
+          this.RowAction('', '管理桌面卡片', '打开卡片管理：全部事件 / 单事件 / 胶囊 / 自定义卡片',
             () => this.openFormManager())
 
 

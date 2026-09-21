@@ -99,7 +99,11 @@ export class TimelineRecord {
   }
 }
 
-/** 分类染色色板（12 色，与 Android 版逐一对应；`| 0` 转成有符号 int 以保持存储一致） */
+/**
+ * 分类染色色板（23 色，与 Android 版 EventColors.palette 严格对齐；
+ * `| 0` 转成有符号 int 以保持存储一致，顺序也一致：第 0 格不是「自定义」，
+ * 末尾也不额外加「自定义」，「自定义」由 ColorPickerPanel 组件层单独处理）。
+ */
 export const EVENT_COLORS: number[] = [
   0xFFE53935 | 0, // 红
   0xFFFB8C00 | 0, // 橙
@@ -112,8 +116,53 @@ export const EVENT_COLORS: number[] = [
   0xFF8E24AA | 0, // 紫
   0xFFD81B60 | 0, // 粉
   0xFF6D4C41 | 0, // 棕
-  0xFF546E7A | 0  // 蓝灰
+  0xFF546E7A | 0, // 蓝灰
+  0xFFC62828 | 0, // 深红
+  0xFFEF6C00 | 0, // 深橙
+  0xFFFDD835 | 0, // 明黄
+  0xFF689F38 | 0, // 草绿
+  0xFF26A69A | 0, // 薄荷
+  0xFF00BCD4 | 0, // 亮青
+  0xFF42A5F5 | 0, // 浅蓝
+  0xFF5C6BC0 | 0, // 浅靛
+  0xFFAB47BC | 0, // 浅紫
+  0xFFEC407A | 0, // 玫粉
+  0xFF8D6E63 | 0  // 浅棕
 ];
+
+/**
+ * 判断字符串是否为合法 hex 颜色：
+ * 接受 `#RRGGBB` / `RRGGBB` / `#RGB` / `RGB`（大小写均可），去掉首尾空格后判断。
+ */
+export function isValidHex(s: string): boolean {
+  const t: string = s.trim();
+  const m: RegExpMatchArray | null = t.match(/^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/);
+  return m !== null;
+}
+
+/**
+ * hex 颜色字符串 → 有符号 32 位 int（与 [colorToHex] 严格互逆：
+ * `colorToHex(hexToColor('#3B82F6')) === '#3B82F6'`）。
+ * - `#` 可省略；支持 3 位缩写（`#F00` → 红）。
+ * - 解析失败时返回安全默认色（蓝 0xFF1E88E5）。
+ *
+ * 转换逻辑：`parseInt(h,16)` 得到 0..0xFFFFFF 的 RGB；`0xFF000000 | rgb` 补全 alpha 通道；
+ * 末尾 `| 0` 把超过 2^31 的无符号值收敛为有符号 int（负数），
+ * 与 `colorToHex` 里的 `color >>> 0` 互为逆操作。
+ */
+export function hexToColor(hex: string): number {
+  const t: string = hex.trim();
+  const m: RegExpMatchArray | null = t.match(/^#?([0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$/);
+  if (m === null) {
+    return 0xFF1E88E5 | 0; // 安全默认蓝
+  }
+  let h: string = m[1];
+  if (h.length === 3) {
+    h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  }
+  const rgb: number = parseInt(h, 16);
+  return (0xFF000000 | rgb) | 0;
+}
 
 /** 随机取一个色板颜色（新建事件默认色） */
 export function randomEventColor(): number {
