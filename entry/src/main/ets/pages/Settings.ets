@@ -285,12 +285,10 @@ struct Settings {
           this.RowAction('', '使用教程', '在线图文教程（无网时显示内置简明版）',
             () => router.pushUrl({ url: 'pages/Tutorial' }))
 
-          // ---------- 协议与隐私（关于页已移除，协议入口保留在此） ----------
-          this.SectionTitle('协议与隐私')
+          // ---------- 隐私（关于页已移除；《用户协议》待法务确认文本后恢复入口） ----------
+          this.SectionTitle('隐私')
           this.RowAction('', '隐私政策', '数据仅存本机 · 不申请权限 · 无第三方 SDK',
-            () => router.pushUrl({ url: 'pages/PrivacyDoc', params: { doc: 'privacy' } }))
-          this.RowAction('', '用户协议', '使用条款与免责说明',
-            () => router.pushUrl({ url: 'pages/PrivacyDoc', params: { doc: 'agreement' } }))
+            () => router.pushUrl({ url: 'pages/PrivacyDoc' }))
         }
         .width('100%')
         .padding({ top: 4, bottom: 40 })

@@ -1,16 +1,13 @@
-import { common, Want } from '@kit.AbilityKit';
 import router from '@ohos.router';
 import { getTheme, ThemeColors } from '../util/Theme';
 
-/** GitHub 完整图文（联网时的补充入口） */
-const TUTORIAL_URL: string = 'https://github.com/baoru0908/timestamp-recorder-harmony#tutorial';
-
 /**
- * 使用教程（App 内置原生页，离线可读）。
+ * 使用教程（App 内置原生页，离线可读、无任何外链）。
  *
  * 对齐 Android v4.1.0 `TutorialActivity`：把最常用、最短的内容内置进来 ——
- * 三步上手 + 桌面卡片重点引导（本 App 核心特色），GitHub 仅作联网时的补充入口。
- * （旧版是 WebView 加载 GitHub，国内常连不上，已弃用。）
+ * 三步上手 + 桌面卡片重点引导（本 App 核心特色）。
+ * 合规：本页不提供任何跳转外部站点的入口（旧版 WebView 加载 GitHub 已弃用，
+ * 2026-09-21 又移除了最后的系统浏览器跳转入口）。
  */
 @Entry
 @Component
@@ -23,25 +20,7 @@ struct Tutorial {
     return getTheme(this.isDark);
   }
 
-  /** 用系统浏览器打开外链 */
-  private openUrl(url: string): void {
-    // ⚠️ startAbility 在 UIAbilityContext 上，common.Context 没有该方法（编译期就会报）；
-    //    且 getHostContext() 可能为空，直接 as 强转后调用会崩 → 先判空。
-    const host: common.Context | undefined = this.getUIContext().getHostContext();
-    if (host === undefined) {
-      this.getUIContext().getPromptAction().showToast({ message: '打开链接失败，请稍后再试' });
-      return;
-    }
-    const ctx: common.UIAbilityContext = host as common.UIAbilityContext;
-    const want: Want = {
-      action: 'ohos.want.action.viewData',
-      entities: ['entity.system.browsable'],
-      uri: url
-    };
-    ctx.startAbility(want).catch(() => {
-      this.getUIContext().getPromptAction().showToast({ message: `未能打开浏览器，请手动访问：${url}`, duration: 4000 });
-    });
-  }
+  // 合规：本页不提供任何外部链接跳转（原 openUrl 系统浏览器跳转已移除）
 
   build() {
     Column() {
@@ -152,18 +131,7 @@ struct Tutorial {
             '数据只存在本机，App 不联网。换机或重装前：设置 → 数据备份 → 导出 JSON；恢复是整体覆盖（恢复前会提示数量）。'
           ])
 
-          // 补充：GitHub 完整文档（联网时可用）
-          Text('GitHub 上有更完整的图文说明（需联网）')
-            .fontSize(14)
-            .fontColor(this.theme().onSurface)
-            .textAlign(TextAlign.Center)
-            .width('100%')
-            .height(48)
-            .borderRadius(12)
-            .backgroundColor(this.theme().glassCard)
-            .border({ width: 1, color: this.theme().glassStroke })
-            .margin({ top: 16 })
-            .onClick(() => this.openUrl(TUTORIAL_URL))
+          // 合规：已移除「打开 GitHub 网页」跳转入口（不引导跳出应用、不依赖外部站点）
         }
         .width('100%')
         .padding({ left: 20, right: 20, top: 16, bottom: 28 + this.navBarH })

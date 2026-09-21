@@ -40,7 +40,7 @@ struct PrivacyGate {
   private onDecline(): void {
     this.getUIContext().showAlertDialog({
       title: '需要你的同意',
-      message: '根据应用隐私合规要求，未同意《隐私政策》与《用户协议》将无法使用本应用。确定退出吗？',
+      message: '根据应用隐私合规要求，未同意《隐私政策》将无法使用本应用。确定退出吗？',
       buttons: [
         {
           value: '退出应用',
@@ -142,7 +142,6 @@ struct PrivacyGate {
 
         Row() {
           this.DocLink('《隐私政策》', 'privacy')
-          this.DocLink('《用户协议》', 'agreement')
         }
         .width('100%')
         .margin({ top: 8, bottom: 20 })
@@ -150,7 +149,7 @@ struct PrivacyGate {
         // ---------- 勾选行（默认不勾选，合规红线） ----------
         Row() {
           this.CheckBox()
-          Text('我已阅读并同意《隐私政策》和《用户协议》')
+          Text('我已阅读并同意《隐私政策》')
             .fontSize(14)
             .fontColor(this.theme().onSurface)
             .layoutWeight(1)

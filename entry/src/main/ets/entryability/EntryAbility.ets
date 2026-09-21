@@ -59,7 +59,7 @@ export default class EntryAbility extends UIAbility {
     // Main window is created, set main page for this ability
     this.logInfo('Ability onWindowStageCreate');
 
-    // 隐私合规门：未同意当前版本则先弹《隐私政策》《用户协议》，同意后再进主页
+    // 隐私合规门：未同意当前版本则先弹《隐私政策》，同意后再进主页
     const target: string = Privacy.hasAgreed(this.context) ? 'pages/Index' : 'pages/PrivacyGate';
     windowStage.loadContent(target, (err) => {
       if (err.code) {

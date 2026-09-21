@@ -5,7 +5,7 @@ import { EventRepository } from '../data/EventRepository';
 const KEY_AGREED_VERSION: string = 'privacy_agreed_version';
 
 /**
- * 隐私合规工具：判断用户是否已同意当前版本的《隐私政策》《用户协议》。
+ * 隐私合规工具：判断用户是否已同意当前版本的《隐私政策》。
  *
  * 触发规则（鸿蒙应用市场合规要求）：
  * - 首次启动：从未同意过 → 必须弹出
