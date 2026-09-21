@@ -32,3 +32,6 @@ build_p*.log
 /build-profile.json5
 # gongju jiaoben han bendi jue dui lujing - bu ru ku
 /tools
+
+# 隐私政策静态站产物（由 tools/build_privacy_site.py 从 privacy.html 生成）
+/dist
