@@ -4,6 +4,7 @@
  * 深浅两套由 getTheme(isDark) 切换；isDark 由 AppStorage('isDark') 全局驱动，跟随系统。
  */
 import uiMaterial from '@ohos.arkui.uiMaterial';
+import { logD } from './Log';
 
 /**
  * 液态玻璃统一封装（API 26 ImmersiveMaterial）。
@@ -46,8 +47,8 @@ function isImmersiveSupported(): boolean {
     ok = false;
   }
   materialSupportedCache = ok;
-  // 仅首次探测打一条日志（release 下也仅此一条，用于确认是否 out of scope），不再逐组件刷屏。
-  console.info(`[Glass] immersiveMaterial supported=${ok}`);
+  // 合规：日志走 logD，release 包静默（此前这里是裸 console.info，release 仍会打印）
+  logD('Glass', `immersiveMaterial supported=${ok}`);
   return ok;
 }
 

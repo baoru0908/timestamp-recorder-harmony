@@ -1,6 +1,7 @@
 import { ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { hilog } from '@kit.PerformanceAnalysisKit';
+import BuildProfile from 'BuildProfile';
 
 /** 配置页读取的卡片添加 Want（FormConfig 页 import 使用） */
 export let formConfigWant: Want | null = null;
@@ -15,7 +16,10 @@ export default class FormConfigAbility extends UIAbility {
     // 独立能力场景（EntryAbility 未启动）也要保证主题标志存在
     AppStorage.setOrCreate<boolean>('isDark',
       this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
-    hilog.info(0x0001, 'FormConfigAbility', 'onCreate want=%{public}s', JSON.stringify(want));
+    // 合规：Want 里含卡片实例参数，完整 JSON 只用于 debug 排障，release 包不打印
+    if (BuildProfile.DEBUG) {
+      hilog.info(0x0001, 'FormConfigAbility', 'onCreate want=%{public}s', JSON.stringify(want));
+    }
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
