@@ -1039,7 +1039,9 @@ struct Index {
             }
             .id(`ev-${row.ev.id}`)
             .margin({ bottom: CARD_GAP })
-          }, (row: EventRow) => `${row.ev.id}-${row.count}`)
+          // ⚠️ key 必须含进行中标志：点「结束」时段数不变，仅 ongoing 从非 null 变 null，
+          // 若 key 只含 id-count 则不变化 → ForEach 复用旧组件，胶囊文案停在「结束」不刷新
+          }, (row: EventRow) => `${row.ev.id}-${row.count}-${row.ongoing === null ? 0 : 1}`)
           .onMove((from: number, to: number) => {
             this.moveEvent(from, to);
           })
