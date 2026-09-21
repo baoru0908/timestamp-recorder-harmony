@@ -151,20 +151,112 @@ export function dimLabel(d: number): string {
   return '2*2';
 }
 
-/** 4*4 显示更多行 */
-export function maxRowsOf(dim: string): number {
-  return dim === '4*4' ? 6 : 4;
+/**
+ * 卡片排版档位（多事件场景的统一栅格）。
+ *
+ * 设计规则（详见 `release/CARD_LAYOUT_SPEC.md`）：
+ * - **左基线**：标题左缘 = 行块左缘 = padH；时间右缘 = padH（正文左对齐、时间右对齐）
+ * - **垂直**：行内元素一律垂直居中；行高 = 内容高 + 2×rowPadV
+ * - **层级**：标题(L1) > 事件名(L2) > 时间/提示(L3) > 溢出提示(L4)
+ * - **响应式**：按卡片尺寸档位取整套参数（1*2 / 2*2 / 2*4 / 4*4），字号与间距同步缩放，
+ *   避免"小尺寸塞大字号导致溢出、大尺寸用小球导致空旷"
+ */
+export interface CardMetrics {
+  /** 卡片左右内边距 */
+  padH: number;
+  /** 顶部内边距 */
+  padTop: number;
+  /** 底部内边距 */
+  padBottom: number;
+  /** 标题字号（L1） */
+  titleSize: number;
+  /** 次级提示字号（右上提示 / 溢出提示） */
+  hintSize: number;
+  /** 行块左右内边距（内容左基线 = padH + rowPadH） */
+  rowPadH: number;
+  /** 行高（内容 + 上下内边距） */
+  rowH: number;
+  /** 行内上下内边距 */
+  rowPadV: number;
+  /** 行间距 */
+  rowGap: number;
+  /** 事件名字号（L2） */
+  nameSize: number;
+  /** 时间字号（L3） */
+  timeSize: number;
+  /** 色点直径 */
+  dotSize: number;
+  /** 色点与事件名间距 */
+  dotGap: number;
+  /** 行块圆角 */
+  rowRadius: number;
+  /** 最多显示行数（超出显示「还有 N 个事件」） */
+  maxRows: number;
 }
 
-/** 自定义卡片的行数上限（2*4 / 4*4 多一行） */
-export function maxRowsOfCustom(dim: string): number {
-  if (dim === '4*4') {
-    return 6;
+/** 1*2 极扁档：只放得下一行 */
+const M_1X2: CardMetrics = {
+  padH: 12, padTop: 8, padBottom: 8,
+  titleSize: 13, hintSize: 9,
+  rowPadH: 10, rowH: 26, rowPadV: 5, rowGap: 4,
+  nameSize: 12, timeSize: 10, dotSize: 8, dotGap: 6, rowRadius: 8,
+  maxRows: 1
+};
+
+/** 2*2 标准档 */
+const M_2X2: CardMetrics = {
+  padH: 14, padTop: 12, padBottom: 10,
+  titleSize: 15, hintSize: 10,
+  rowPadH: 12, rowH: 32, rowPadV: 7, rowGap: 6,
+  nameSize: 13, timeSize: 11, dotSize: 10, dotGap: 8, rowRadius: 12,
+  maxRows: 4
+};
+
+/** 2*4 竖长档 */
+const M_2X4: CardMetrics = {
+  padH: 16, padTop: 14, padBottom: 12,
+  titleSize: 16, hintSize: 10,
+  rowPadH: 12, rowH: 36, rowPadV: 8, rowGap: 6,
+  nameSize: 14, timeSize: 11, dotSize: 10, dotGap: 8, rowRadius: 12,
+  maxRows: 6
+};
+
+/** 4*4 大卡档 */
+const M_4X4: CardMetrics = {
+  padH: 18, padTop: 16, padBottom: 14,
+  titleSize: 17, hintSize: 11,
+  rowPadH: 14, rowH: 40, rowPadV: 9, rowGap: 8,
+  nameSize: 15, timeSize: 12, dotSize: 12, dotGap: 10, rowRadius: 14,
+  maxRows: 6
+};
+
+/** 内容左基线（标题、行内文本、溢出提示统一缩进到这条竖线） */
+export function contentInset(m: CardMetrics): number {
+  return m.padH + m.rowPadH;
+}
+
+/** 按尺寸档位取整套排版参数（未知尺寸按 2*2 处理） */
+export function cardMetricsOf(dim: string): CardMetrics {
+  if (dim === '1*2') {
+    return M_1X2;
   }
   if (dim === '2*4') {
-    return 5;
+    return M_2X4;
   }
-  return 4;
+  if (dim === '4*4') {
+    return M_4X4;
+  }
+  return M_2X2;
+}
+
+/** 多事件卡片可显示的列表行数上限（按档位；与排版参数同源，避免"参数改了行数没改"） */
+export function maxRowsOf(dim: string): number {
+  return cardMetricsOf(dim).maxRows;
+}
+
+/** 自定义卡片与外层共享同一套行数规则 */
+export function maxRowsOfCustom(dim: string): number {
+  return cardMetricsOf(dim).maxRows;
 }
 
 /**

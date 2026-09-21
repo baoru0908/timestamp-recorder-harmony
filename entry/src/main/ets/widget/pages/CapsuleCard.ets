@@ -1,4 +1,11 @@
-import { CARD_TEXT, CARD_TEXT_SUB, CARD_TX_RECORDING, CARD_TX_MISSING } from '../../model/CardData';
+import {
+  CARD_TEXT,
+  CARD_TEXT_SUB,
+  CARD_TX_RECORDING,
+  CARD_TX_MISSING,
+  CardMetrics,
+  cardMetricsOf
+} from '../../model/CardData';
 
 /**
  * 胶囊服务卡片：1*2 横向胶囊，事件色填充，左侧名称 + 右侧动作。
@@ -18,6 +25,11 @@ struct CapsuleCard {
   @LocalStorageProp('lastText') lastText: string = '';
   @LocalStorageProp('isInterval') isInterval: boolean = false;
 
+  /** 排版档位（与其它卡片同源，1*2 扁条尺寸） */
+  private m(): CardMetrics {
+    return cardMetricsOf('1*2');
+  }
+
   /** 是否正在计时（数据层下发「● 进行中」即为进行中） */
   private ongoing(): boolean {
     return this.lastText === CARD_TX_RECORDING;
@@ -34,7 +46,7 @@ struct CapsuleCard {
   build() {
     Row() {
       Text(this.name)
-        .fontSize(16)
+        .fontSize(this.m().nameSize + 4)
         .fontWeight(FontWeight.Bold)
         .fontColor(CARD_TEXT)
         .maxLines(1)
@@ -43,7 +55,7 @@ struct CapsuleCard {
       // 时间段进行中：名称旁给出状态（与行内文案同一套表达）
       if (this.isInterval && this.ongoing()) {
         Text(CARD_TX_RECORDING)
-          .fontSize(10)
+          .fontSize(this.m().hintSize + 1)
           .fontColor(CARD_TEXT_SUB)
           .maxLines(1)
           .margin({ left: 8 })
@@ -62,14 +74,14 @@ struct CapsuleCard {
           .fontColor(CARD_TEXT)
       }
       Text(this.actionText())
-        .fontSize(14)
+        .fontSize(this.m().nameSize + 2)
         .fontWeight(FontWeight.Bold)
         .fontColor(CARD_TEXT)
         .margin({ left: 6 })
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 18, right: 14 })
+    .padding({ left: this.m().rowPadH + 8, right: this.m().rowPadH + 4 })
     .alignItems(VerticalAlign.Center)
     .backgroundColor(this.color)
     .onClick(() => postCardAction(this, {

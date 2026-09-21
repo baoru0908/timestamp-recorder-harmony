@@ -1,8 +1,20 @@
-import { CardEventJson, CARD_TEXT_DIM, isLightHex } from '../../model/CardData';
+import {
+  CardEventJson,
+  CardMetrics,
+  cardMetricsOf,
+  contentInset,
+  isLightHex,
+  CARD_TEXT_DIM
+} from '../../model/CardData';
 
 /**
  * 自定义服务卡片（对齐 Android WidgetCustomProvider）：
  * 用户可设「标题 + 背景色 或 背景图」，并勾选多个事件；点行即记录该事件。
+ *
+ * 排版与「全部事件」卡片**共用同一套规范**（`CardData.cardMetricsOf`），
+ * 保证多事件场景下两卡的层级、间距、对齐完全一致；差异仅在配色来源：
+ * - 文字色由数据层按底色亮度下发（浅底自动转深字）
+ * - 行块底色：有背景图或深底 → 半透明白；浅底 → 半透明黑
  *
  * 数据来源：FormAbility 构建 payload → formBindingData（含 formImages 的 fd）→ @LocalStorageProp。
  * 背景图走 `Image('memory://<bgImageKey>')`：鸿蒙卡片**不能直接读沙箱路径**，必须由
@@ -26,12 +38,17 @@ struct CustomCard {
   @LocalStorageProp('events') events: CardEventJson[] = [];
   @LocalStorageProp('rest') rest: number = 0;
 
+  /** 当前尺寸档位的排版参数（与全部事件卡片同源） */
+  private m(): CardMetrics {
+    return cardMetricsOf(this.dimension);
+  }
+
   /** 底色是否偏浅（浅底行底用深色半透明，保证层次） */
   private isLight(): boolean {
     return isLightHex(this.bgColor);
   }
 
-  /** 事件行底色：深底用半透明白，浅底用半透明黑 */
+  /** 事件行底色：深底/有图 → 半透明白；浅底 → 半透明黑 */
   private rowBg(): string {
     return this.isLight() && !this.hasBgImage ? '#14000000' : '#26FFFFFF';
   }
@@ -56,83 +73,98 @@ struct CustomCard {
           .backgroundColor('#59000000')
       }
 
-      // 第三层：内容
+      // 第三层：内容（三段式，与全部事件卡片同规范）
       Column() {
-        // 标题行
+        // ── 标题区 ──
         Row() {
           Text(this.title)
-            .fontSize(15)
+            .fontSize(this.m().titleSize)
             .fontWeight(FontWeight.Bold)
             .fontColor(this.titleColor)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
           Blank()
           Text('点击记录')
-            .fontSize(10)
+            .fontSize(this.m().hintSize)
             .fontColor(this.subTextColor)
+            .maxLines(1)
         }
         .width('100%')
-        .padding({ left: 18, right: 18, top: 14, bottom: 8 })
+        .padding({
+          left: contentInset(this.m()),
+          right: contentInset(this.m()),
+          top: this.m().padTop,
+          bottom: this.m().rowGap + 2
+        })
+        .alignItems(VerticalAlign.Center)
 
         if (!this.hasData) {
           // 空态：点击打开 App 配置
           Column() {
             Text('暂无事件')
-              .fontSize(14)
+              .fontSize(this.m().nameSize)
               .fontColor(this.textColor)
             Text('点击打开 App 添加')
-              .fontSize(11)
+              .fontSize(this.m().timeSize)
               .fontColor(this.subTextColor)
-              .margin({ top: 4 })
+              .margin({ top: this.m().rowGap })
           }
           .width('100%')
           .layoutWeight(1)
           .justifyContent(FlexAlign.Center)
           .onClick(() => postCardAction(this, { action: 'router', abilityName: 'EntryAbility', params: {} }))
         } else {
-          // 事件行（固定行渲染，不依赖 List；色点用圆角方块，兼容 API 24）
+          // ── 事件列表 ──
           ForEach(this.events, (ev: CardEventJson) => {
             Row() {
               Row()
-                .width(10)
-                .height(10)
-                .borderRadius(5)
+                .width(this.m().dotSize)
+                .height(this.m().dotSize)
+                .borderRadius(this.m().dotSize / 2)
                 .backgroundColor(ev.color)
               Text(ev.name)
-                .fontSize(13)
+                .fontSize(this.m().nameSize)
                 .fontColor(this.textColor)
                 .maxLines(1)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .margin({ left: 8 })
-              Blank().layoutWeight(1)
+                .layoutWeight(1)
+                .margin({ left: this.m().dotGap })
               Text(ev.lastText)
-                .fontSize(11)
+                .fontSize(this.m().timeSize)
                 .fontColor(this.subTextColor)
                 .maxLines(1)
-                .margin({ left: 6 })
+                .margin({ left: this.m().dotGap })
             }
             .width('100%')
-            .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-            .margin({ left: 12, right: 12, bottom: 6 })
-            .borderRadius(12)
+            .height(this.m().rowH)
+            .padding({ left: this.m().rowPadH, right: this.m().rowPadH })
+            .margin({ left: this.m().padH, right: this.m().padH, bottom: this.m().rowGap })
+            .borderRadius(this.m().rowRadius)
             .backgroundColor(this.rowBg())
+            .alignItems(VerticalAlign.Center)
             .onClick(() => postCardAction(this, {
               action: 'message',
               params: { 'action': 'record', 'eventId': ev.id }
             }))
           }, (ev: CardEventJson) => `${ev.id}-${ev.lastText}`)
 
+          // ── 溢出提示（L4）──
           if (this.rest > 0) {
             Text(`还有 ${this.rest} 个事件`)
-              .fontSize(10)
-              .fontColor(CARD_TEXT_DIM)
-              .margin({ top: 4 })
+              .fontSize(this.m().hintSize)
+              .fontColor(this.subTextColor)
+              .opacity(0.72)
+              .maxLines(1)
+              .width('100%')
+              .padding({ left: contentInset(this.m()), right: contentInset(this.m()) })
+              .margin({ top: 2 })
           }
         }
       }
       .width('100%')
       .height('100%')
-      .padding({ bottom: 12 })
+      .alignItems(HorizontalAlign.Start)
+      .padding({ bottom: this.m().padBottom })
     }
     .width('100%')
     .height('100%')
