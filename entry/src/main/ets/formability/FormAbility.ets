@@ -6,6 +6,7 @@ import { Want } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import BuildProfile from 'BuildProfile';
 import { EventRepository } from '../data/EventRepository';
+import { TimestampEvent } from '../model/TimestampEvent';
 import { buildFormData, closeTrackedFds, updateOneForm } from '../util/FormSync';
 
 const DOMAIN = 0x0001;
@@ -49,7 +50,22 @@ export default class FormAbility extends FormExtensionAbility {
         hilog.info(DOMAIN, 'FormAbility', 'parsed action=%{public}s eventId=%{public}d', action, eventId);
       }
       if (action === 'record' && eventId > 0) {
-        new EventRepository(this.context).addRecord(eventId);
+        // ⚠️ 必按事件类型分派（对齐 Android `TimestampWidgetProvider.onReceive`）：
+        //    点时刻 → 记一条；时间段 → **开始 / 结束切换**。
+        //    旧实现一律 addRecord，会让时间段卡片点一次就多一条错误的「点时刻」记录。
+        const repo = new EventRepository(this.context);
+        const ev: TimestampEvent | null = repo.getEvent(eventId);
+        if (ev !== null) {
+          if (ev.isInterval()) {
+            if (repo.getOngoingInterval(ev.id) !== null) {
+              repo.stopInterval(ev.id);
+            } else {
+              repo.startInterval(ev.id);
+            }
+          } else {
+            repo.addRecord(ev.id);
+          }
+        }
       }
     } catch (err) {
       // 非 JSON 消息忽略

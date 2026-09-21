@@ -225,10 +225,16 @@ export class EventRepository {
     const intObj: Record<string, IntervalJson[]> = {};
     this.getEvents().forEach((e: TimestampEvent) => {
       recObj[`${e.id}`] = this.getRecords(e.id);
-      intObj[`${e.id}`] = this.getIntervals(e.id).map((it: TimeInterval) => {
-        const j: IntervalJson = { start: it.start, end: it.end };
-        return j;
-      });
+      // ⚠️ 顺序红线：鸿蒙内部按 start 升序存，Android 侧按 **最新在前（降序）** 存
+      //    （Android `startInterval` 用 `list.add(0, ...)`）。导出时翻转为降序，
+      //    否则跨平台导入后两端卡片/详情取「最近一段」会取到相反的段。
+      const inner: TimeInterval[] = this.getIntervals(e.id);
+      const desc: IntervalJson[] = [];
+      for (let i: number = inner.length - 1; i >= 0; i--) {
+        const j: IntervalJson = { start: inner[i].start, end: inner[i].end };
+        desc.push(j);
+      }
+      intObj[`${e.id}`] = desc;
     });
     const root: BackupRoot = {
       app: BACKUP_APP,
@@ -267,6 +273,9 @@ export class EventRepository {
           for (let j: number = 0; j < arr.length; j++) {
             list.push(new TimeInterval(arr[j].start, arr[j].end));
           }
+          // 容错：无论来源顺序（Android 降序 / 旧版鸿蒙升序 / 手工编辑）都统一按 start 升序，
+          // 与内部约定（"按 start 升序"）对齐，避免卡片取「最近一段」时取反。
+          list.sort((a: TimeInterval, b: TimeInterval) => a.start - b.start);
           intervals.set(Number(k), list);
         }
       }
@@ -406,14 +415,32 @@ export class EventRepository {
   }
 
   /** 开始一段；已有进行中的段则失败（返回 false） */
+  /**
+   * 开始一段计时（对齐 Android `EventRepository.startInterval`）。
+   * 若已有进行中的段，**先按「现在」结束它**，再插入新段：
+   * 保证任何时刻最多一段进行中，也避免旧实现「已有进行中就直接返回 false」造成的静默丢操作
+   * （卡片连续点击时尤其明显）。
+   */
   startInterval(eventId: number): boolean {
-    if (this.getOngoingInterval(eventId) !== null) {
-      return false;
-    }
     const list: TimeInterval[] = this.getIntervals(eventId);
-    list.push(new TimeInterval(Date.now()));
+    const now: number = Date.now();
+    for (let i: number = 0; i < list.length; i++) {
+      if (list[i].isOngoing()) {
+        list[i].end = now;
+      }
+    }
+    list.push(new TimeInterval(now));
     this.saveIntervals(eventId, list);
     return true;
+  }
+
+  /** 最近一段（内部按 start 升序 → 取末尾）；无段返回 null。对齐 Android `getIntervals().first()` */
+  latestInterval(eventId: number): TimeInterval | null {
+    const list: TimeInterval[] = this.getIntervals(eventId);
+    if (list.length === 0) {
+      return null;
+    }
+    return list[list.length - 1];
   }
 
   /** 结束当前进行中的段；没有进行中的段则失败（返回 false） */

@@ -3,7 +3,7 @@ import formBindingData from '@ohos.app.form.formBindingData';
 import formProvider from '@ohos.app.form.formProvider';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { EventRepository } from '../data/EventRepository';
-import { TimestampEvent, colorToHex } from '../model/TimestampEvent';
+import { TimestampEvent, TimeInterval, colorToHex } from '../model/TimestampEvent';
 import { TimeFormat } from '../util/TimeFormat';
 import {
   CardEventJson,
@@ -13,6 +13,7 @@ import {
   maxRowsOf,
   maxRowsOfCustom,
   customTextColors,
+  cardCountText,
   PREF_BIND_PREFIX,
   PREF_CUSTOM_TITLE,
   PREF_CUSTOM_BG,
@@ -20,12 +21,40 @@ import {
   PREF_CUSTOM_EVENTS,
   CUSTOM_DEFAULT_TITLE,
   CUSTOM_IMG_KEY,
+  CARD_TX_RECORDING,
+  CARD_TX_IV_IDLE,
+  CARD_TX_IV_START,
+  CARD_TX_NO_RECORD,
+  CARD_TX_IV_HINT,
+  CARD_TX_CLICK_HINT,
+  CARD_TX_MISSING,
   FORM_ALL,
   FORM_SINGLE,
   FORM_CAPSULE,
   FORM_CUSTOM,
   CARD_MISSING
 } from '../model/CardData';
+
+/**
+ * 卡片行内「最近时间」文案 —— **三种卡片共用同一套规则**，逐条对齐 Android：
+ * - 时间段：进行中 → `● 进行中`；有段 → 最近一段的 end（缺省用 start）的 HH:mm:ss；无段 → `未开始`（单事件大卡片用 `点此开始`）
+ * - 点时刻：有记录 → 最近一条的 HH:mm:ss；无 → `未记录`
+ * 边界说明：跨天的时间段只显示「时:分:秒」（与 Android 一致，不显示日期）；两端均为本地时区。
+ */
+function rowTimeText(repo: EventRepository, ev: TimestampEvent, singleCard: boolean): string {
+  if (ev.isInterval()) {
+    if (repo.getOngoingInterval(ev.id) !== null) {
+      return CARD_TX_RECORDING;
+    }
+    const latest: TimeInterval | null = repo.latestInterval(ev.id);
+    if (latest !== null) {
+      return TimeFormat.hm(latest.end ?? latest.start);
+    }
+    return singleCard ? CARD_TX_IV_START : CARD_TX_IV_IDLE;
+  }
+  const last: number | null = repo.lastRecord(ev.id);
+  return last !== null ? TimeFormat.hm(last) : CARD_TX_NO_RECORD;
+}
 
 /**
  * 服务卡片数据构建 + 全量刷新。
@@ -125,12 +154,11 @@ export function buildFormData(ctx: common.Context, name: string, dim: number): R
       }
       valid++;
       if (rows.length < cap) {
-        const t: number = repo.lastActivityAt(ev);
         const row: CardEventJson = {
           id: ev.id,
           name: ev.name,
           color: colorToHex(ev.color),
-          lastText: t > 0 ? TimeFormat.hm(t) : '暂无'
+          lastText: rowTimeText(repo, ev, false)
         };
         rows.push(row);
       }
@@ -160,21 +188,26 @@ export function buildFormData(ctx: common.Context, name: string, dim: number): R
       dimension: dimLabel(dim),
       hasData: false,
       eventId: 0,
-      name: '未绑定事件',
+      name: CARD_TX_MISSING,
       color: CARD_MISSING,
       lastText: '',
-      count: 0
+      count: 0,
+      hint: CARD_TX_CLICK_HINT,
+      isInterval: false
     };
     const bindId: number = repo.getPrefNum(`${PREF_BIND_PREFIX}${name}`, 0);
     const ev: TimestampEvent | null = bindId > 0 ? repo.getEvent(bindId) : null;
     if (ev !== null) {
-      const last: number | null = repo.lastRecord(ev.id);
       payload.hasData = true;
       payload.eventId = ev.id;
       payload.name = ev.name;
       payload.color = colorToHex(ev.color);
-      payload.lastText = last !== null ? TimeFormat.hm(last) : '暂无记录';
-      payload.count = repo.recordCount(ev.id);
+      // 时间段 → 进行中 / 最近一段结束时间 / 点此开始；点时刻 → 最近记录时间 / 未记录
+      payload.lastText = rowTimeText(repo, ev, true);
+      // 计数：时间段统计「段数」，点时刻统计「条数」（对齐 Android WidgetSingleProvider）
+      payload.count = ev.isInterval() ? repo.intervalCount(ev.id) : repo.recordCount(ev.id);
+      payload.hint = ev.isInterval() ? CARD_TX_IV_HINT : CARD_TX_CLICK_HINT;
+      payload.isInterval = ev.isInterval();
     }
     const out: Record<string, Object> = {};
     out['formName'] = payload.formName;
@@ -185,6 +218,8 @@ export function buildFormData(ctx: common.Context, name: string, dim: number): R
     out['color'] = payload.color;
     out['lastText'] = payload.lastText;
     out['count'] = payload.count;
+    out['hint'] = payload.hint;
+    out['isInterval'] = payload.isInterval;
     return out;
   }
 
@@ -203,12 +238,11 @@ export function buildFormData(ctx: common.Context, name: string, dim: number): R
     if (payload.events.length >= cap) {
       return;
     }
-    const last: number | null = repo.lastRecord(e.id);
     const row: CardEventJson = {
       id: e.id,
       name: e.name,
       color: colorToHex(e.color),
-      lastText: last !== null ? TimeFormat.hm(last) : '暂无'
+      lastText: rowTimeText(repo, e, false)
     };
     payload.events.push(row);
   });

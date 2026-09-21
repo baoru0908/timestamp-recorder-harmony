@@ -30,6 +30,10 @@ export interface CardSinglePayload {
   color: string;
   lastText: string;
   count: number;
+  /** 底部提示文案：时间段 → 点击开始 / 结束；点时刻 → 点击记录（对齐 Android widget_interval_hint / widget_click_hint） */
+  hint: string;
+  /** 绑定事件是否为时间段形态（胶囊卡片据此显示「开始 / 结束」而非「记录」） */
+  isInterval: boolean;
 }
 
 /**
@@ -103,6 +107,29 @@ export const CARD_TEXT_DIM: string = '#99FFFFFF';
 /** 浅底卡片使用的文字色 */
 export const CARD_TEXT_ON_LIGHT: string = '#1A1C1E';
 export const CARD_SUB_ON_LIGHT: string = '#991A1C1E';
+
+// ---------- 卡片文案（逐条对齐 Android res/values/strings.xml，改文案时两端同步） ----------
+/** 时间段进行中：widget_recording_dot */
+export const CARD_TX_RECORDING: string = '● 进行中';
+/** 时间段尚无任何段：widget_interval_idle */
+export const CARD_TX_IV_IDLE: string = '未开始';
+/** 时间段尚无任何段（单事件大卡片用）：widget_interval_start */
+export const CARD_TX_IV_START: string = '点此开始';
+/** 点时刻尚无记录：widget_row_no_record */
+export const CARD_TX_NO_RECORD: string = '未记录';
+/** 时间段卡片底部提示：widget_interval_hint */
+export const CARD_TX_IV_HINT: string = '点击开始 / 结束';
+/** 点时刻卡片底部提示：widget_click_hint */
+export const CARD_TX_CLICK_HINT: string = '点击记录';
+/** 绑定事件已被删除（短）：widget_single_missing_short */
+export const CARD_TX_MISSING: string = '已删除';
+/** 绑定事件已被删除（长）：widget_single_missing */
+export const CARD_TX_MISSING_LONG: string = '事件已删除，长按重新配置';
+
+/** 单事件卡片计数文案：widget_single_count（"共 %1$d 次"） */
+export function cardCountText(n: number): string {
+  return `共 ${n} 次`;
+}
 
 /** 维度枚举值（formInfo.FormDimension）→ 字符串标签 */
 export function dimLabel(d: number): string {
