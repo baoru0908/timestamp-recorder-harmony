@@ -58,6 +58,27 @@
         "1*2"
       ],
       "formConfigAbility": "ability://FormConfigAbility"
+    },
+    {
+      "name": "custom",
+      "description": "$string:widget_custom_desc",
+      "src": "./ets/widget/pages/CustomCard.ets",
+      "uiSyntax": "arkts",
+      "window": {
+        "designWidth": 720,
+        "autoDesignWidth": true
+      },
+      "colorMode": "auto",
+      "isDefault": false,
+      "updateEnabled": true,
+      "scheduledUpdateTime": "10:30",
+      "defaultDimension": "2*2",
+      "supportDimensions": [
+        "2*2",
+        "2*4",
+        "4*4"
+      ],
+      "formConfigAbility": "ability://FormConfigAbility"
     }
   ]
 }

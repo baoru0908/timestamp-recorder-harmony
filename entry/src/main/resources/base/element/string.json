@@ -23,6 +23,10 @@
     {
       "name": "widget_capsule_desc",
       "value": "胶囊快捷记录：点击即记录一条"
+    },
+    {
+      "name": "widget_custom_desc",
+      "value": "自定义卡片：可设标题、底色或背景图，勾选多个事件"
     }
   ]
 }

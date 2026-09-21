@@ -32,17 +32,77 @@ export interface CardSinglePayload {
   count: number;
 }
 
+/**
+ * 自定义卡片载荷（对齐 Android WidgetCustomProvider）：
+ * 标题 + 背景色（或背景图）+ 勾选的多行事件。
+ */
+export interface CardCustomPayload {
+  formName: string;
+  dimension: string;
+  hasData: boolean;
+  /** 卡片标题（用户可自定义） */
+  title: string;
+  /** 背景色（hex 字符串；有背景图时作为兜底/降级色） */
+  bgColor: string;
+  /** 是否下发背景图（true 时卡片渲染 Image('memory://<bgImageKey>')） */
+  hasBgImage: boolean;
+  /** 背景图在 formImages 中的 key（卡片端拼 memory:// 用） */
+  bgImageKey: string;
+  /** 标题文字色（按背景亮度自适应的白色或近黑） */
+  titleColor: string;
+  /** 行主文字色 */
+  textColor: string;
+  /** 行副文字色 */
+  subTextColor: string;
+  events: CardEventJson[];
+  rest: number;
+}
+
 export const FORM_ALL: string = 'all_events';
 export const FORM_SINGLE: string = 'single_event';
 export const FORM_CAPSULE: string = 'capsule';
+export const FORM_CUSTOM: string = 'custom';
 
 /** 绑定前缀：form_bind_<formName> → eventId */
 export const PREF_BIND_PREFIX: string = 'form_bind_';
+
+// —— 自定义卡片配置键（按 formName 存，与现有绑定模式一致）——
+/** 标题 */
+export const PREF_CUSTOM_TITLE: string = 'form_custom_title';
+/** 背景色（有符号 int） */
+export const PREF_CUSTOM_BG: string = 'form_custom_bgcolor';
+/** 背景图文件名（存于 filesDir，空串 = 无背景图） */
+export const PREF_CUSTOM_IMG: string = 'form_custom_bgimage';
+/** 勾选的事件 id 列表（JSON 数组字符串） */
+export const PREF_CUSTOM_EVENTS: string = 'form_custom_events';
+
+/** 标题默认值 */
+export const CUSTOM_DEFAULT_TITLE: string = '我的记录';
+/** 背景图在 formImages 里的固定 key */
+export const CUSTOM_IMG_KEY: string = 'custombg';
+/** 背景图在沙箱中的固定文件名（单卡片配置，一卡一图） */
+export const CUSTOM_IMG_FILE: string = 'custom_card_bg.jpg';
+/** 背景图入库前的最大边长（超过则等比缩放，控制卡片渲染开销） */
+export const CUSTOM_IMG_MAX_SIDE: number = 720;
+
+/** 背景色预设（对齐 Android 6 预设：深浅混合，浅色会自动切换深色文字） */
+export const CUSTOM_BG_PRESETS: string[] = [
+  '#1A1C1E', // 深灰（默认）
+  '#1E3A5F', // 深蓝
+  '#3E2723', // 深棕
+  '#1B3A2F', // 深绿
+  '#3A1B2F', // 深紫
+  '#F5F5F5'  // 浅灰（浅底→深色文字）
+];
+
 export const CARD_DARK: string = '#F01A1C1E';
 export const CARD_MISSING: string = '#546E7A';
 export const CARD_TEXT: string = '#FFFFFF';
 export const CARD_TEXT_SUB: string = '#CCFFFFFF';
 export const CARD_TEXT_DIM: string = '#99FFFFFF';
+/** 浅底卡片使用的文字色 */
+export const CARD_TEXT_ON_LIGHT: string = '#1A1C1E';
+export const CARD_SUB_ON_LIGHT: string = '#991A1C1E';
 
 /** 维度枚举值（formInfo.FormDimension）→ 字符串标签 */
 export function dimLabel(d: number): string {
@@ -61,4 +121,47 @@ export function dimLabel(d: number): string {
 /** 4*4 显示更多行 */
 export function maxRowsOf(dim: string): number {
   return dim === '4*4' ? 6 : 4;
+}
+
+/** 自定义卡片的行数上限（2*4 / 4*4 多一行） */
+export function maxRowsOfCustom(dim: string): number {
+  if (dim === '4*4') {
+    return 6;
+  }
+  if (dim === '2*4') {
+    return 5;
+  }
+  return 4;
+}
+
+/**
+ * 判断 hex 颜色是否属于「浅色」（相对亮度 > 0.6）→ 决定卡片文字用深色还是白色。
+ * 与 Android EventColors.onColor 的阈值保持一致（0.60）。
+ * 解析失败时按深色处理（返回 false → 用白字，最保守）。
+ */
+export function isLightHex(hex: string): boolean {
+  let h: string = hex.trim();
+  if (h.startsWith('#')) {
+    h = h.substring(1);
+  }
+  if (h.length !== 6) {
+    return false;
+  }
+  const r: number = Number.parseInt(h.substring(0, 2), 16);
+  const g: number = Number.parseInt(h.substring(2, 4), 16);
+  const b: number = Number.parseInt(h.substring(4, 6), 16);
+  if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
+    return false;
+  }
+  // 感知亮度（与 Android 侧同一套系数）
+  const lum: number = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6;
+}
+
+/** 依背景色给出（标题色 / 主文字色 / 副文字色）三元组 */
+export function customTextColors(bgHex: string): string[] {
+  if (isLightHex(bgHex)) {
+    return [CARD_TEXT_ON_LIGHT, CARD_TEXT_ON_LIGHT, CARD_SUB_ON_LIGHT];
+  }
+  return [CARD_TEXT, CARD_TEXT, CARD_TEXT_SUB];
 }
