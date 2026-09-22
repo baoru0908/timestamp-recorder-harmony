@@ -20,8 +20,14 @@ import { getTheme, ThemeColors } from '../util/Theme';
  * 2026-09-21（v1.4.5）：正文按托管页可见内容**逐字重写**为 4 节结构
  * （1 收集使用 / 2 管理您的个人信息 / 3 信息存储地点及期限 / 4 如何联系我们）。
  * - **《用户协议》已于 2026-09-21 暂时撤下**：草案正文可从 git 历史找回（v1.3.0 的
- *   `pages/PrivacyDoc.ets`，含 `AGREEMENT_BLOCKS`）。恢复时需同步三处：本页分支、
- *   `pages/PrivacyGate` 的入口与勾选文案、设置页入口。
+ *   `pages/PrivacyDoc.ets`，含 `AGREEMENT_BLOCKS`）。
+ *
+ * 2026-09-22（v1.4.8）：AGC 审核整改（问题1「应用出现两个隐私弹窗」）—— 首启隐私弹窗统一
+ *   由 AGC「标准化隐私声明托管服务」在系统侧自动弹出，应用内自建的首启隐私弹窗
+ *   `pages/PrivacyGate` 已整体删除。自此本页的**同步点只剩两处**：
+ *   ① **本页正文**（`PRIVACY_BLOCKS`，与托管页逐字一致）；② **设置页「隐私政策」入口**。
+ *   设置页「撤回隐私同意」不再回到任何应用内弹窗，而是调用系统
+ *   `privacyManager.disableService()`，由系统重新弹出标准化隐私声明。
  */
 
 interface DocBlock {

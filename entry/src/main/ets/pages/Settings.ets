@@ -7,7 +7,7 @@ import formProvider from '@ohos.app.form.formProvider';
 import { EventRepository, BackupData } from '../data/EventRepository';
 import { syncAllForms } from '../util/FormSync';
 import { TimeFormat } from '../util/TimeFormat';
-import { Privacy } from '../util/Privacy';
+import { privacyManager } from '@kit.StoreKit';
 import { getTheme, ThemeColors } from '../util/Theme';
 
 /**
@@ -146,22 +146,32 @@ struct Settings {
 
   /**
    * 撤回隐私同意（对齐《华为应用市场审核指南》7.6「提供简单的撤销同意方式」）。
-   * 二次确认后清空同意状态并回到合规门，由用户重新阅读、重新决定。
-   * 只清同意标记，不触碰任何本地数据。
+   *
+   * 走系统 `privacyManager.disableService()`（停止隐私协议托管服务）：撤回后系统清除隐私声明
+   * 同意记录并退出应用，下次启动由系统重新弹出 AGC 标准化隐私声明，由用户重新决定。
+   * 二次确认后执行，只清同意记录，不触碰任何本地数据。
+   *
+   * ⚠️ 隐私管理服务不支持模拟器（未安装 AppGallery / 不支持该服务时 disableService 会抛异常），
+   *    因此必须 try-catch 并 toast，绝不能让 App 崩溃。
    */
   private revokePrivacyConsent(): void {
     this.getUIContext().showAlertDialog({
       title: '撤回隐私同意',
-      message: '撤回后本应用会重新展示《隐私政策》并再次征得你的同意。你的本地数据不受任何影响。',
+      message: '撤回后系统将清除你的隐私声明同意记录并退出应用，下次打开时会重新弹出隐私声明，由你重新决定。你的本地数据不受任何影响。',
       autoCancel: true,
       alignment: DialogAlignment.Center,
       primaryButton: {
         value: '撤回',
         fontColor: this.theme().primary,
         action: () => {
-          const ctx = this.getUIContext().getHostContext() as common.Context;
-          Privacy.reset(ctx);
-          router.replaceUrl({ url: 'pages/PrivacyGate' });
+          try {
+            privacyManager.disableService();
+            this.toast('已撤回，即将退出应用');
+            const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+            ctx.terminateSelf();
+          } catch (err) {
+            this.toast('当前环境不支持撤回，请在正式版中操作');
+          }
         }
       },
       secondaryButton: {
@@ -339,7 +349,7 @@ struct Settings {
           this.SectionTitle('隐私')
           this.RowAction('', '隐私政策', '数据仅存本机 · 不申请权限 · 无第三方 SDK',
             () => router.pushUrl({ url: 'pages/PrivacyDoc' }))
-          this.RowAction('', '撤回隐私同意', '重新阅读《隐私政策》，由你再次决定是否同意',
+          this.RowAction('', '撤回隐私同意', '撤回后系统将重新弹出隐私声明，由你再次决定',
             () => this.revokePrivacyConsent())
         }
         .width('100%')

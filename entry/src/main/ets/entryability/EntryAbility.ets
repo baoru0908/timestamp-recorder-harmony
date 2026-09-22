@@ -17,7 +17,6 @@ import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want 
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { display, window } from '@kit.ArkUI';
 import BuildProfile from 'BuildProfile';
-import { Privacy } from '../util/Privacy';
 
 const DOMAIN = 0x0000;
 
@@ -59,9 +58,9 @@ export default class EntryAbility extends UIAbility {
     // Main window is created, set main page for this ability
     this.logInfo('Ability onWindowStageCreate');
 
-    // 隐私合规门：未同意当前版本则先弹《隐私政策》，同意后再进主页
-    const target: string = Privacy.hasAgreed(this.context) ? 'pages/Index' : 'pages/PrivacyGate';
-    windowStage.loadContent(target, (err) => {
+    // 隐私弹窗由 AGC 标准化隐私声明托管服务在首启时由系统自动弹出，
+    // 应用内不再自建隐私弹窗（AGC 审核整改：避免双弹窗）。
+    windowStage.loadContent('pages/Index', (err) => {
       if (err.code) {
         hilog.error(DOMAIN, 'appTag', 'Failed to load the content. Cause: %{public}s', JSON.stringify(err));
         return;
