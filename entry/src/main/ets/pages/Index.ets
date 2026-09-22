@@ -1148,15 +1148,16 @@ struct Index {
       .margin({ left: 12 })
       .onClick(() => this.openDetail(row.ev.id))
 
-      // ⋮（编辑 / 删除）
-      Column() {
-        this.MoreVertIcon(this.theme().onSurfaceVariant)
-      }
-      .width(34)
-      .height(34)
-      .margin({ left: 6 })
-      .justifyContent(FlexAlign.Center)
-      .onClick(() => this.showEventMenu(row.ev))
+        // ⋮（编辑 / 删除）
+        // ⚠️ 热区 40×40vp：满足《通用应用 UX 体验标准》2.1.3.3「可点击热区不得小于 40vp×40vp」（必须级）
+        Column() {
+          this.MoreVertIcon(this.theme().onSurfaceVariant)
+        }
+        .width(40)
+        .height(40)
+        .margin({ left: 6 })
+        .justifyContent(FlexAlign.Center)
+        .onClick(() => this.showEventMenu(row.ev))
 
       // 快捷记录胶囊（事件色 + 白色图标）。点时刻=记一条；时间段=开始/结束切换
       Row() {
@@ -1644,6 +1645,7 @@ struct Index {
       }
       .constraintSize({ maxHeight: '92%' })
       .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
     }
     .width('100%')
     .height('100%')

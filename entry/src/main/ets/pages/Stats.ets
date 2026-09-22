@@ -424,6 +424,7 @@ struct Stats {
         .width('100%')
         .layoutWeight(1)
         .scrollBar(BarState.Off)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       } else {
         Column() {
           Text('还没有记录')

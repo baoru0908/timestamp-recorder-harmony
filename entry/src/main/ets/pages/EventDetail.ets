@@ -667,6 +667,7 @@ struct EventDetail {
         .layoutWeight(1)
         .scrollBar(BarState.Off)
         .align(Alignment.Top)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
 
         Row() {
           Text('取消')
@@ -923,6 +924,7 @@ struct EventDetail {
           .layoutWeight(1)
           .padding({ left: 20, right: 20, top: 8, bottom: this.selectMode ? 96 : 24 })
           .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         }
       }
       .width('100%')

@@ -369,12 +369,12 @@ struct FormConfig {
             .fontWeight(FontWeight.Bold)
             .fontColor(this.theme().onSurfaceVariant)
         }
-        .width(34)
-        .height(34)
-        .borderRadius(17)
-        .backgroundColor(this.theme().inputBg)
-        .border({ width: 1, color: this.theme().outline })
-        .margin({ right: 8, bottom: 8 })
+          .width(40)
+          .height(40)
+          .borderRadius(20)
+          .backgroundColor(this.theme().inputBg)
+          .border({ width: 1, color: this.theme().outline })
+          .margin({ right: 8, bottom: 8 })
         .onClick(() => {
           this.hexInput = this.customBg;
           this.hexError = '';
@@ -546,6 +546,7 @@ struct FormConfig {
     .width('100%')
     .layoutWeight(1)
     .scrollBar(BarState.Off)
+    .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
   }
 
   build() {
@@ -596,6 +597,7 @@ struct FormConfig {
         .layoutWeight(1)
         .scrollBar(BarState.Off)
         .align(Alignment.Top)
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
       } else {
         Text('选择该小组件要绑定的目标事件：桌面将显示事件色大按钮，点击即记录该事件。')
           .fontSize(13)
@@ -654,6 +656,7 @@ struct FormConfig {
           .width('100%')
           .layoutWeight(1)
           .scrollBar(BarState.Off)
+          .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         }
       }
     }
